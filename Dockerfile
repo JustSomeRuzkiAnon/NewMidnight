@@ -1,7 +1,7 @@
 FROM node:18-bullseye-slim
 RUN apt-get update && \
     apt-get install -y git
-RUN git clone https://gitgud.io/reanon/nonono.git /app
+RUN git clone https://github.com/JustSomeRuzkiAnon/NewMidnight.git /app
 WORKDIR /app
 RUN chown -R 1000:1000 /app
 USER 1000
