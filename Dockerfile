@@ -1,16 +1,24 @@
 FROM node:18-bullseye-slim
 RUN apt-get update && \
-    apt-get install -y git
-RUN git clone https://github.com/JustSomeRuzkiAnon/NewMidnight.git /app
-WORKDIR /app
-RUN chown -R 1000:1000 /app
-USER 1000
-RUN npm install
-COPY Dockerfile greeting.md* .env* ./
-RUN npm run build
-EXPOSE 7860
-ENV NODE_ENV=production
-# Huggigface free VMs have 16GB of RAM so we can be greedy
-ENV NODE_OPTIONS="--max-old-space-size=12882"
-CMD [ "npm", "start" ]
+    apt-get install -y curl
+    
+# Unlike Huggingface, Render can only deploy straight from a git repo and
+# doesn't allow you to create or modify arbitrary files via the web UI.
+# To use a greeting file, set `GREETING_URL` to a URL that points to a raw
+# text file containing your greeting, such as a GitHub Gist.
 
+# You may need to clear the build cache if you change the greeting, otherwise
+# Render will use the cached layer from the previous build.
+
+WORKDIR /app
+ARG GREETING_URL
+RUN if [ -n "$GREETING_URL" ]; then \
+    curl -sL "$GREETING_URL" > greeting.md; \
+    fi
+COPY . .
+RUN npm install
+RUN npm run build
+RUN --mount=type=secret,id=_env,dst=/etc/secrets/.env cat /etc/secrets/.env >> .env
+EXPOSE 10000
+ENV NODE_ENV=production
+CMD [ "npm", "start" ]
