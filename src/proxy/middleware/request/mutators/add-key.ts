@@ -111,6 +111,9 @@ export const addKey: ProxyReqMutator = (manager) => {
     case "glm":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
+    case "glm-zai":
+      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+      break;
     case "moonshot":
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;

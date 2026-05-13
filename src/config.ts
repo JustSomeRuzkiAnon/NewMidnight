@@ -63,6 +63,10 @@ type Config = {
    */
   glmKey?: string;
   /**
+   * Comma-delimited list of GLM-ZAI (z.ai) API keys.
+   */
+  glmZaiKey?: string;
+  /**
    * Comma-delimited list of OpenRouter API keys.
    */
   openRouterKey?: string;
@@ -527,6 +531,7 @@ export const config: Config = {
   anthropicKey: getEnvWithDefault("ANTHROPIC_KEY", ""),
   qwenKey: getEnvWithDefault("QWEN_KEY", ""),
   glmKey: getEnvWithDefault("GLM_KEY", ""),
+  glmZaiKey: getEnvWithDefault("GLM_ZAI_KEY", ""),
   googleAIKey: getEnvWithDefault("GOOGLE_AI_KEY", ""),
   openRouterKey: getEnvWithDefault("OPENROUTER_KEY", ""),
   allowedExpModels: getEnvWithDefault("ALLOWED_EXP_MODELS", ""),
@@ -679,6 +684,7 @@ function generateSigningKey() {
     config.cohereKey,
     config.qwenKey,
     config.glmKey,
+    config.glmZaiKey,
     config.moonshotKey,
     config.awsCredentials,
     config.gcpCredentials,
@@ -859,6 +865,7 @@ export const OMITTED_KEYS = [
   "cohereKey",
   "qwenKey",
   "glmKey",
+  "glmZaiKey",
   "moonshotKey",
   "mistralAIKey",
   "awsCredentials",

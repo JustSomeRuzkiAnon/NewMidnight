@@ -18,6 +18,7 @@ import { XaiKeyProvider } from "./xai/provider";
 import { CohereKeyProvider } from "./cohere/provider";
 import { QwenKeyProvider } from "./qwen/provider";
 import { GlmKeyProvider } from "./glm/provider";
+import { GlmZaiKeyProvider } from "./glm-zai/provider";
 import { MoonshotKeyProvider } from "./moonshot/provider";
 import { OpenRouterKeyProvider } from "./openrouter/provider";
 
@@ -42,6 +43,7 @@ export class KeyPool {
     this.keyProviders.push(new CohereKeyProvider());
     this.keyProviders.push(new QwenKeyProvider());
     this.keyProviders.push(new GlmKeyProvider());
+    this.keyProviders.push(new GlmZaiKeyProvider());
     this.keyProviders.push(new MoonshotKeyProvider());
     this.keyProviders.push(new OpenRouterKeyProvider());
   }
@@ -89,6 +91,7 @@ export class KeyPool {
       service instanceof CohereKeyProvider ||
       service instanceof QwenKeyProvider ||
       service instanceof GlmKeyProvider ||
+      service instanceof GlmZaiKeyProvider ||
       service instanceof MoonshotKeyProvider ||
       service instanceof OpenRouterKeyProvider
     ) {

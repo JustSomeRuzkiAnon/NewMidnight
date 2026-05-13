@@ -252,6 +252,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         await handleDeepseekBadRequestError(req, errorPayload);
         break;
       case "glm":
+      case "glm-zai":
         await handleGlmBadRequestError(req, errorPayload);
         break;
         case "xai":
@@ -401,6 +402,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         await handleDeepseekRateLimitError(req, errorPayload);
         break;
       case "glm":
+      case "glm-zai":
         await handleGlmRateLimitError(req, errorPayload);
         break;
         case "xai":
@@ -443,6 +445,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "azure":
       case "deepseek":
       case "glm":
+      case "glm-zai":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -1292,7 +1295,7 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
         tokenizer: "api-usage-data",
       };
 
-      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "cohere" || req.service === "qwen") {
+      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "glm-zai" || req.service === "cohere" || req.service === "qwen") {
         // O1 consumes (a significant amount of) invisible tokens for the chain-
         // of-thought reasoning. We have no way to count these other than to check
         // the response body.

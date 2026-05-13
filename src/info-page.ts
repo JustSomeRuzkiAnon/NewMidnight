@@ -29,6 +29,7 @@ const LOGIN_ROUTE   = "/";
 const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   qwen: "Qwen",
   glm: "GLM",
+  "glm-zai": "GLM-ZAI",
   cohere: "Cohere",
   deepseek: "Deepseek",
   xai: "Grok",

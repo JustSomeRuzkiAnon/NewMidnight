@@ -10,6 +10,7 @@ import {
   CohereKey,
   QwenKey,
   GlmKey,
+  GlmZaiKey,
   MoonshotKey,
 } from "./shared/key-management";
 import {
@@ -30,6 +31,7 @@ import {
   CohereModelFamily,
   QwenModelFamily,
   GlmModelFamily,
+  GlmZaiModelFamily,
   MoonshotModelFamily,
   OpenRouterModelFamily,
 } from "./shared/models";
@@ -124,6 +126,7 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "cohere",
   "qwen",
   "glm",
+  "glm-zai",
   "moonshot",
   "OpRout_OpenAI",
   "OpRout_Anthropic",
@@ -158,6 +161,8 @@ const keyIsQwenKey = (k: KeyPoolKey): k is QwenKey =>
   k.service === "qwen";
 const keyIsGlmKey = (k: KeyPoolKey): k is GlmKey =>
   k.service === "glm";
+const keyIsGlmZaiKey = (k: KeyPoolKey): k is GlmZaiKey =>
+  k.service === "glm-zai";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
 
@@ -237,6 +242,7 @@ export type ServiceInfo = {
     openai?: string;
     deepseek?: string;
     glm?: string;
+    "glm-zai"?: string;
     xai?: string;
     anthropic?: string;
     "google-ai"?: string;
@@ -265,6 +271,7 @@ export type ServiceInfo = {
   & { [f in CohereModelFamily]?: BaseFamilyInfo }
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in GlmModelFamily]?: BaseFamilyInfo }
+  & { [f in GlmZaiModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo }
   & { [f in OpenRouterModelFamily]?: BaseFamilyInfo };
 // https://stackoverflow.com/a/66661477
@@ -338,6 +345,9 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   },
   glm: {
     glm: `%BASE%/glm`,
+  },
+  "glm-zai": {
+    "glm-zai": `%BASE%/glm-zai`,
   },
   moonshot: {
     moonshot: `%BASE%/moonshot`,
@@ -509,6 +519,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("cohere__keys", k.service === "cohere" ? 1 : 0);
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
   addToService("glm__keys", k.service === "glm" ? 1 : 0);
+  addToService("glm-zai__keys", k.service === "glm-zai" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
   addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
 
@@ -724,6 +735,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
+    case "glm-zai":
+      if (!keyIsGlmZaiKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
@@ -856,6 +874,9 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "glm":
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "glm-zai":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "moonshot":
