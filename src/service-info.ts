@@ -11,6 +11,7 @@ import {
   QwenKey,
   GlmKey,
   GlmZaiKey,
+  GlmZaiCodingKey,
   MoonshotKey,
 } from "./shared/key-management";
 import {
@@ -32,6 +33,7 @@ import {
   QwenModelFamily,
   GlmModelFamily,
   GlmZaiModelFamily,
+  GlmZaiCodingModelFamily,
   MoonshotModelFamily,
   OpenRouterModelFamily,
 } from "./shared/models";
@@ -127,6 +129,7 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "qwen",
   "glm",
   "glm-zai",
+  "glm-zai-coding",
   "moonshot",
   "OpRout_OpenAI",
   "OpRout_Anthropic",
@@ -163,6 +166,8 @@ const keyIsGlmKey = (k: KeyPoolKey): k is GlmKey =>
   k.service === "glm";
 const keyIsGlmZaiKey = (k: KeyPoolKey): k is GlmZaiKey =>
   k.service === "glm-zai";
+const keyIsGlmZaiCodingKey = (k: KeyPoolKey): k is GlmZaiCodingKey =>
+  k.service === "glm-zai-coding";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
 
@@ -243,6 +248,7 @@ export type ServiceInfo = {
     deepseek?: string;
     glm?: string;
     "glm-zai"?: string;
+    "glm-zai-coding"?: string;
     xai?: string;
     anthropic?: string;
     "google-ai"?: string;
@@ -272,6 +278,7 @@ export type ServiceInfo = {
   & { [f in QwenModelFamily]?: BaseFamilyInfo }
   & { [f in GlmModelFamily]?: BaseFamilyInfo }
   & { [f in GlmZaiModelFamily]?: BaseFamilyInfo }
+  & { [f in GlmZaiCodingModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo }
   & { [f in OpenRouterModelFamily]?: BaseFamilyInfo };
 // https://stackoverflow.com/a/66661477
@@ -348,6 +355,9 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   },
   "glm-zai": {
     "glm-zai": `%BASE%/glm-zai`,
+  },
+  "glm-zai-coding": {
+    "glm-zai-coding": `%BASE%/glm-zai-coding`,
   },
   moonshot: {
     moonshot: `%BASE%/moonshot`,
@@ -520,6 +530,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("qwen__keys", k.service === "qwen" ? 1 : 0);
   addToService("glm__keys", k.service === "glm" ? 1 : 0);
   addToService("glm-zai__keys", k.service === "glm-zai" ? 1 : 0);
+  addToService("glm-zai-coding__keys", k.service === "glm-zai-coding" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
   addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
 
@@ -742,6 +753,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
+    case "glm-zai-coding":
+      if (!keyIsGlmZaiCodingKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
@@ -877,6 +895,9 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "glm-zai":
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "glm-zai-coding":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "moonshot":

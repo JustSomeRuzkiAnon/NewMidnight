@@ -16,6 +16,7 @@ import { cohere } from "./cohere";
 import { qwen } from "./qwen";
 import { glm } from "./glm";
 import { glmZai } from "./glm-zai";
+import { glmZaiCoding } from "./glm-zai-coding";
 import { moonshot } from "./moonshot";
 import { openRouter } from "./openrouter";
 import { sendErrorToClient } from "./middleware/response/error-generator";
@@ -63,6 +64,7 @@ proxyRouter.use("/cohere", addV1, cohere);
 proxyRouter.use("/qwen", addV1, qwen);
 proxyRouter.use("/glm", addV1, glm);
 proxyRouter.use("/glm-zai", addV1, glmZai);
+proxyRouter.use("/glm-zai-coding", addV1, glmZaiCoding);
 proxyRouter.use("/moonshot", addV1, moonshot);
 proxyRouter.use("/openrouter", addV1, openRouter);
 

@@ -253,6 +253,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         break;
       case "glm":
       case "glm-zai":
+      case "glm-zai-coding":
         await handleGlmBadRequestError(req, errorPayload);
         break;
         case "xai":
@@ -446,6 +447,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "deepseek":
       case "glm":
       case "glm-zai":
+      case "glm-zai-coding":
       case "cohere":
       case "qwen":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
@@ -1295,7 +1297,7 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
         tokenizer: "api-usage-data",
       };
 
-      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "glm-zai" || req.service === "cohere" || req.service === "qwen") {
+      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "glm-zai" || req.service === "glm-zai-coding" || req.service === "cohere" || req.service === "qwen") {
         // O1 consumes (a significant amount of) invisible tokens for the chain-
         // of-thought reasoning. We have no way to count these other than to check
         // the response body.

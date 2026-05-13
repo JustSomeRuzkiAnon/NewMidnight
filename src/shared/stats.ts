@@ -6,6 +6,7 @@ const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | und
   "deepseek": { input: 0.55, output: 2.19 }, // DeepSeek Reasoner (standard price, input cache miss)
   "glm": { input: 0.40, output: 1.60 }, // GLM (bigmodel.cn) pricing: 40 cents input, $1.6 output per 1M tokens
   "glm-zai": { input: 0.40, output: 1.60 }, // GLM-ZAI (z.ai) pricing: same as GLM
+  "glm-zai-coding": { input: 0.40, output: 1.60 }, // GLM-ZAI-CODING (z.ai/coding) pricing: same as GLM
   "xai": { input: 5.6, output: 16.8 }, // Grok: Derived from avg $14/1M (assuming 1:3 in/out ratio) - needs official pricing
   "gpt41": { input: 2.00, output: 8.00 },
   "azure-gpt41": { input: 2.00, output: 8.00 },

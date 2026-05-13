@@ -107,5 +107,6 @@ export { CohereKey } from "./cohere/provider";
 export { QwenKey } from "./qwen/provider";
 export { GlmKey } from "./glm/provider";
 export { GlmZaiKey } from "./glm-zai/provider";
+export { GlmZaiCodingKey } from "./glm-zai-coding/provider";
 export { MoonshotKey } from "./moonshot/provider";
 export { OpenRouterKey } from "./openrouter/provider";

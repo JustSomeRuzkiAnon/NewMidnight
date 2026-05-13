@@ -21,6 +21,7 @@ export type LLMService =
   | "qwen"
   | "glm"
   | "glm-zai"
+  | "glm-zai-coding"
   | "moonshot"
   | "openrouter";
 
@@ -72,6 +73,7 @@ export type CohereModelFamily = "cohere";
 export type QwenModelFamily = "qwen";
 export type GlmModelFamily = "glm";
 export type GlmZaiModelFamily = "glm-zai";
+export type GlmZaiCodingModelFamily = "glm-zai-coding";
 export type MoonshotModelFamily = "moonshot";
 export type OpenRouterModelFamily = 
   | "openrouter"
@@ -121,6 +123,7 @@ export type ModelFamily =
   | QwenModelFamily
   | GlmModelFamily
   | GlmZaiModelFamily
+  | GlmZaiCodingModelFamily
   | MoonshotModelFamily
   | OpenRouterModelFamily;
 
@@ -131,6 +134,7 @@ export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   "qwen",
   "glm",
   "glm-zai",
+  "glm-zai-coding",
   "cohere",
   "xai",
   "deepseek",
@@ -235,6 +239,7 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "qwen",
   "glm",
   "glm-zai",
+  "glm-zai-coding",
   "moonshot",
   "openrouter"
 ] as const);
@@ -246,6 +251,7 @@ export const MODEL_FAMILY_SERVICE: {
   qwen: "qwen",
   glm: "glm",
   "glm-zai": "glm-zai",
+  "glm-zai-coding": "glm-zai-coding",
   cohere: "cohere",
   xai: "xai",
   deepseek: "deepseek",
@@ -540,6 +546,8 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
     modelFamily = "glm";
   } else if (req.service === "glm-zai") {
     modelFamily = "glm-zai";
+  } else if (req.service === "glm-zai-coding") {
+    modelFamily = "glm-zai-coding";
   } else if (req.service === "openrouter") {
     modelFamily = 'openrouter'  
   } else {
