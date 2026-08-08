@@ -1,7 +1,13 @@
+import axios from "axios";
 import { CustomKey } from "./provider";
 import { logger } from "../../../logger";
 import { assertNever } from "../../utils";
-import { CustomProvider, getProviderUrl } from "../../custom-providers";
+import {
+  CustomProvider,
+  getProviderUrl,
+  resolveProviderProxy,
+} from "../../custom-providers";
+import { getProxyAgent } from "../../network";
 
 const CHECK_TIMEOUT = 10000;
 const SERVER_ERROR_RETRY_DELAY = 5000; // 5 seconds
@@ -108,18 +114,21 @@ export class CustomKeyChecker {
   private async validateKey(
     key: CustomKey
   ): Promise<"valid" | "invalid" | "quota" | "server_error"> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
     const url = getProviderUrl(this.provider, "/v1/models");
+    // axios rather than fetch, because only it can be pointed at the
+    // provider's outbound proxy agent.
+    const proxyUrl = resolveProviderProxy(this.provider);
+    const agent = proxyUrl ? getProxyAgent(proxyUrl) : undefined;
 
-    try {
-      const response = await fetch(url, {
-        method: "GET",
+    {
+      const response = await axios.get(url, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${key.key}`,
         },
-        signal: controller.signal,
+        timeout: CHECK_TIMEOUT,
+        validateStatus: () => true,
+        ...(agent ? { httpAgent: agent, httpsAgent: agent, proxy: false } : {}),
       });
 
       switch (response.status) {
@@ -163,8 +172,6 @@ export class CustomKeyChecker {
           );
           return "valid";
       }
-    } finally {
-      clearTimeout(timeout);
     }
   }
 

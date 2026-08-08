@@ -61,6 +61,24 @@ export function getHttpAgents() {
   return [httpAgent, httpsAgent];
 }
 
+/**
+ * Agents for per-provider outbound proxies (SOCKS5, HTTP CONNECT, ...), cached
+ * by proxy URL so connections are pooled. Unlike `config.httpAgent.proxyUrl`,
+ * these apply to one custom provider rather than the whole process.
+ */
+const proxyAgents = new Map<string, HttpAgent>();
+
+export function getProxyAgent(proxyUrl: string): HttpAgent {
+  let agent = proxyAgents.get(proxyUrl);
+  if (!agent) {
+    agent = new ProxyAgent({ getProxyForUrl: () => proxyUrl }) as HttpAgent;
+    proxyAgents.set(proxyUrl, agent);
+    const safe = proxyUrl.replace(/\/\/[^@]*@/, "//******@");
+    log.info({ proxy: safe }, "Created outbound proxy agent.");
+  }
+  return agent;
+}
+
 export function getAxiosInstance() {
   if (axiosInstance) return axiosInstance;
 

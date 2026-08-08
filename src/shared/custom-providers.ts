@@ -25,6 +25,14 @@ export interface ProviderModel {
   name: string;
 }
 
+/**
+ * A value that may be given inline or as a reference to an environment
+ * variable, so secrets can stay out of the providers file.
+ */
+export type SecretSource =
+  | { kind: "env"; name: string }
+  | { kind: "inline"; value: string };
+
 export interface CustomProvider {
   /** Section name. Also the local route (/proxy/<id>) and the model family. */
   id: string;
@@ -55,7 +63,12 @@ export interface CustomProvider {
   /** Overrides the global CHECK_KEYS for this provider. */
   checkKeys?: boolean;
   /** Where the keys come from; env vars are read lazily, after dotenv runs. */
-  keys: { kind: "env"; name: string } | { kind: "inline"; value: string };
+  keys: SecretSource;
+  /**
+   * Outbound proxy for this provider's upstream requests, e.g.
+   * `socks5://user:pass@host:1080`. Resolved lazily like `keys`.
+   */
+  proxy?: SecretSource;
   /** Source line of the section header, for error messages. */
   line: number;
 }
@@ -65,6 +78,7 @@ const KNOWN_KEYS = [
   "type",
   "url",
   "keys",
+  "proxy",
   "models",
   "path-style",
   "context",
@@ -230,6 +244,43 @@ function parseModels(
   return { models, passthroughOthers };
 }
 
+const PROXY_PROTOCOLS = [
+  "socks5:",
+  "socks5h:",
+  "socks4:",
+  "socks4a:",
+  "socks:",
+  "http:",
+  "https:",
+];
+
+/**
+ * Validates an outbound proxy URL. Reported through a callback because the
+ * value may come from the file (where we know the line) or from the
+ * environment (where we don't).
+ */
+export function assertValidProxyUrl(
+  value: string,
+  report: (message: string) => never
+): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    report(
+      `proxy должен быть URL вида socks5://пользователь:пароль@хост:1080, получено "${value}"`
+    );
+  }
+  if (!PROXY_PROTOCOLS.includes(parsed.protocol)) {
+    report(
+      `протокол прокси "${parsed.protocol.replace(":", "")}" не поддерживается; допустимы ${PROXY_PROTOCOLS.map((p) => p.replace(":", "")).join(", ")}`
+    );
+  }
+  if (!parsed.hostname || !parsed.port) {
+    report(`в адресе прокси "${value}" не указан хост или порт`);
+  }
+}
+
 function parseUrl(file: string, entry: RawEntry): string {
   const trimmed = entry.value.replace(/\/+$/, "");
   let parsed: URL;
@@ -281,12 +332,23 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
     );
   }
 
-  const keysEntry = required("keys");
-  const keys: CustomProvider["keys"] = keysEntry.value.startsWith("$")
-    ? { kind: "env", name: keysEntry.value.slice(1).trim() }
-    : { kind: "inline", value: keysEntry.value };
-  if (keys.kind === "env" && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(keys.name)) {
-    fail(file, keysEntry.line, `"${keysEntry.value}" не похоже на имя переменной окружения`);
+  const toSecret = (entry: RawEntry): SecretSource => {
+    if (!entry.value.startsWith("$")) return { kind: "inline", value: entry.value };
+    const name = entry.value.slice(1).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+      fail(file, entry.line, `"${entry.value}" не похоже на имя переменной окружения`);
+    }
+    return { kind: "env", name };
+  };
+
+  const keys = toSecret(required("keys"));
+
+  const proxyEntry = entries.get("proxy");
+  const proxy = proxyEntry ? toSecret(proxyEntry) : undefined;
+  if (proxy?.kind === "inline") {
+    assertValidProxyUrl(proxy.value, (message) =>
+      fail(file, proxyEntry!.line, message)
+    );
   }
 
   const pathStyleEntry = entries.get("path-style");
@@ -315,6 +377,7 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
     label: entries.get("label")?.value || id.toUpperCase(),
     checkKeys: checkKeysEntry ? parseBoolean(file, "check-keys", checkKeysEntry) : undefined,
     keys,
+    proxy,
     line: section.line,
   };
 }
@@ -353,16 +416,26 @@ export function isCustomProviderId(id: string): boolean {
   return byId.has(id);
 }
 
+function resolveSecret(source: SecretSource): string {
+  return source.kind === "inline"
+    ? source.value
+    : process.env[source.name] ?? "";
+}
+
 /** Reads the provider's keys. Safe to call only after dotenv has run. */
 export function resolveProviderKeys(provider: CustomProvider): string[] {
-  const raw =
-    provider.keys.kind === "inline"
-      ? provider.keys.value
-      : process.env[provider.keys.name] ?? "";
-  return raw
+  return resolveSecret(provider.keys)
     .split(",")
     .map((k) => k.trim())
     .filter(Boolean);
+}
+
+/** Reads the provider's outbound proxy URL, if it has one. */
+export function resolveProviderProxy(
+  provider: CustomProvider
+): string | undefined {
+  if (!provider.proxy) return undefined;
+  return resolveSecret(provider.proxy).trim() || undefined;
 }
 
 /**

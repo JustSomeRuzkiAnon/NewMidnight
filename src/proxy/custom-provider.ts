@@ -14,8 +14,10 @@ import {
   getDeclaredModelNames,
   mergeUpstreamModelNames,
   resolveProviderModel,
+  resolveProviderProxy,
   toPublicModelName,
 } from "../shared/custom-providers";
+import { getProxyAgent } from "../shared/network";
 import { BadRequestError } from "../shared/errors";
 import { logger } from "../logger";
 
@@ -33,6 +35,11 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
 
   let modelsCache: any = null;
   let modelsCacheTime = 0;
+
+  // All of this provider's outbound traffic goes through its proxy, if it has
+  // one: the proxied completions, the model listing, and the key checker.
+  const providerProxy = resolveProviderProxy(provider);
+  const agent = providerProxy ? getProxyAgent(providerProxy) : undefined;
 
   const responseHandler: ProxyResHandlerWithBody = async (
     _proxyRes,
@@ -93,6 +100,7 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
         "Content-Type": "application/json",
         Authorization: `Bearer ${key.key}`,
       },
+      ...(agent ? { httpAgent: agent, httpsAgent: agent, proxy: false } : {}),
     });
 
     if (!response.data || !Array.isArray(response.data.data)) {
@@ -219,6 +227,7 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
     mutations: [addKey, rewritePath, finalizeBody],
     target: () => provider.url,
     blockingResponseHandler: responseHandler,
+    agent,
   });
 
   const router = Router();

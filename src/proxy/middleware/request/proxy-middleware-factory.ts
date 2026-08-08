@@ -35,6 +35,11 @@ type ProxyMiddlewareFactoryOptions = {
    * handled in `handle-streaming-response.ts`.
    */
   blockingResponseHandler?: ProxyResHandlerWithBody;
+  /**
+   * Overrides the default outgoing agent, e.g. to send this endpoint's traffic
+   * through a SOCKS5 proxy.
+   */
+  agent?: http.Agent;
 };
 
 /**
@@ -47,12 +52,14 @@ export function createQueuedProxyMiddleware({
   target,
   mutations,
   blockingResponseHandler,
+  agent: agentOverride,
 }: ProxyMiddlewareFactoryOptions) {
   const hpmTarget = typeof target === "string" ? target : "https://setbyrouter";
   const hpmRouter = typeof target === "function" ? target : undefined;
 
   const [httpAgent, httpsAgent] = getHttpAgents();
-  const agent = hpmTarget.startsWith("http:") ? httpAgent : httpsAgent;
+  const agent =
+    agentOverride ?? (hpmTarget.startsWith("http:") ? httpAgent : httpsAgent);
 
   const proxyMiddleware = createProxyMiddleware<Request, Response>({
     target: hpmTarget,

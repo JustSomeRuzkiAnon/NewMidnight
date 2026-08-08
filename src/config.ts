@@ -6,9 +6,11 @@ import pino from "pino";
 import type { LLMService, ModelFamily } from "./shared/models";
 import { LLM_SERVICES, MODEL_FAMILIES } from "./shared/models";
 import {
+  assertValidProxyUrl,
   getCustomProviders,
   getProvidersFilePath,
   resolveProviderKeys,
+  resolveProviderProxy,
 } from "./shared/custom-providers";
 import { generateUnixTimePseudoQrPdf } from "./shared/pdf-gen";
 dotenv.config();
@@ -892,12 +894,27 @@ export async function assertConfigIsValid() {
       throw new Error(`${providersFile}:${provider.line} — ${where}`);
     }
 
+    const proxyUrl = resolveProviderProxy(provider);
+    if (provider.proxy && !proxyUrl) {
+      throw new Error(
+        `${providersFile}:${provider.line} — переменная окружения ${
+          provider.proxy.kind === "env" ? provider.proxy.name : "с адресом прокси"
+        } не задана или пуста`
+      );
+    }
+    if (proxyUrl) {
+      assertValidProxyUrl(proxyUrl, (message) => {
+        throw new Error(`${providersFile}:${provider.line} — ${message}`);
+      });
+    }
+
     startupLogger.info(
       {
         id: provider.id,
         type: provider.type,
         url: provider.url,
         pathStyle: provider.pathStyle,
+        proxy: proxyUrl ? proxyUrl.replace(/\/\/[^@]*@/, "//******@") : undefined,
       },
       "Custom provider configured."
     );
