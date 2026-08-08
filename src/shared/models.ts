@@ -1,7 +1,10 @@
 // Don't import any other project files here as this is one of the first modules
-// loaded and it will cause circular imports.
+// loaded and it will cause circular imports. `custom-providers` is the sole
+// exception: it deliberately has no project imports of its own, and model
+// families are derived from the providers it declares.
 
 import type { Request } from "express";
+import { getCustomProviders, getProvidersFilePath } from "./custom-providers";
 
 /**
  * The service that a model is hosted on. Distinct from `APIFormat` because some
@@ -24,7 +27,9 @@ export type LLMService =
   | "glm-zai-coding"
   | "moonshot"
   | "openrouter"
-  | "atf";
+  | "atf"
+  /** Any provider declared in the providers file; see `custom-providers.ts`. */
+  | "custom";
 
 export type OpenAIModelFamily =
   | "turbo"
@@ -134,7 +139,11 @@ export type ModelFamily =
   | OpenRouterModelFamily
   | AtfModelFamily;
 
-export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
+/**
+ * Families known at compile time. Custom providers add one family each at
+ * startup; use `MODEL_FAMILIES` for the full runtime list.
+ */
+export const BUILTIN_MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   arr: A & ([ModelFamily] extends [A[number]] ? unknown : never)
 ) => arr)([
   "atf",
@@ -231,6 +240,26 @@ export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   "OpRout_Other",
 ] as const);
 
+/**
+ * Every model family the proxy knows about at runtime: the built-in ones plus
+ * one per custom provider, named after the provider's id.
+ */
+export const MODEL_FAMILIES: ModelFamily[] = (() => {
+  const builtins = new Set<string>(BUILTIN_MODEL_FAMILIES);
+  const families: ModelFamily[] = [...BUILTIN_MODEL_FAMILIES];
+
+  for (const provider of getCustomProviders()) {
+    if (builtins.has(provider.id)) {
+      const message = `${getProvidersFilePath()}:${provider.line} — идентификатор "${provider.id}" совпадает со встроенным семейством моделей`;
+      console.error(`\nОшибка в файле кастомных провайдеров:\n  ${message}\n`);
+      throw new Error(message);
+    }
+    families.push(provider.id as ModelFamily);
+  }
+
+  return families;
+})();
+
 export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   arr: A & ([LLMService] extends [A[number]] ? unknown : never)
 ) => arr)([
@@ -250,7 +279,8 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "glm-zai-coding",
   "moonshot",
   "openrouter",
-  "atf"
+  "atf",
+  "custom"
 ] as const);
 
 export const MODEL_FAMILY_SERVICE: {
@@ -349,6 +379,19 @@ export const MODEL_FAMILY_SERVICE: {
   "OpRout_MoonshotAI": "openrouter",
   "OpRout_Other": "openrouter",
 };
+
+/** True if the family belongs to a provider declared in the providers file. */
+export function isCustomModelFamily(family: ModelFamily): boolean {
+  return getCustomProviders().some((p) => p.id === family);
+}
+
+/**
+ * Like `MODEL_FAMILY_SERVICE`, but also resolves families contributed by custom
+ * providers, which aren't part of the compile-time union.
+ */
+export function getServiceForFamily(family: ModelFamily): LLMService {
+  return isCustomModelFamily(family) ? "custom" : MODEL_FAMILY_SERVICE[family];
+}
 
 export const IMAGE_GEN_MODELS: ModelFamily[] = ["dall-e", "azure-dall-e", "gpt-image", "azure-gpt-image", "gemini-flash"];
 
@@ -562,6 +605,10 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
     modelFamily = 'openrouter'
   } else if (req.service === "atf") {
     modelFamily = "atf";
+  } else if (req.service === "custom") {
+    // One family per custom provider, named after the provider's id, because
+    // an arbitrary upstream's model names can't be mapped to known families.
+    modelFamily = req.customProviderId as ModelFamily;
   } else {
     switch (req.outboundApi) {
       case "anthropic-chat":

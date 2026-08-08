@@ -12,6 +12,13 @@ declare global {
     interface Request {
       key?: Key;
       service?: LLMService;
+      /** Which custom provider handles this request, when service is "custom". */
+      customProviderId?: string;
+      /**
+       * The model name advertised to the client, when it differs from the one
+       * sent upstream. Responses are rewritten back to this name.
+       */
+      publicModelName?: string;
       /** Denotes the format of the user's submitted request. */
       inboundApi: APIFormat;
       /** Denotes the format of the request being proxied to the API. */

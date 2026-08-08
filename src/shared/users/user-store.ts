@@ -298,11 +298,12 @@ export function incrementTokenCount(
   model: string,
   api: APIFormat,
   consumption: { input: number; output: number },
-  service?: LLMService
+  service?: LLMService,
+  customProviderId?: string
 ) {
   const user = users.get(token);
   if (!user) return;
-  const modelFamily = getModelFamilyForQuotaUsage(model, api, service);
+  const modelFamily = getModelFamilyForQuotaUsage(model, api, service, customProviderId);
   const existingCounts = user.tokenCounts[modelFamily] ?? { input: 0, output: 0 };
   
   // Ensure consumption values are non-negative
@@ -364,18 +365,20 @@ export function hasAvailableQuota({
   api,
   requested,
   service,
+  customProviderId,
 }: {
   userToken: string;
   model: string;
   api: APIFormat;
   requested: number;
   service?: LLMService;
+  customProviderId?: string;
 }) {
   const user = users.get(userToken);
   if (!user) return false;
   if (user.type === "special") return true;
 
-  const modelFamily = getModelFamilyForQuotaUsage(model, api, service);
+  const modelFamily = getModelFamilyForQuotaUsage(model, api, service, customProviderId);
   const { tokenCounts, tokenLimits } = user;
   const currentUsage = tokenCounts[modelFamily] ?? { input: 0, output: 0 };
 
@@ -741,11 +744,15 @@ async function flushUsersToSQLite() { // Added
 function getModelFamilyForQuotaUsage(
   model: string,
   api: APIFormat,
-  service?: LLMService
+  service?: LLMService,
+  customProviderId?: string
 ): ModelFamily {
-  // ATF proxies an arbitrary upstream, so its models can't be identified by
-  // name and are all billed against the single "atf" family.
+  // These proxy arbitrary upstreams, so their models can't be identified by
+  // name; each is billed against its own single family.
   if (service === "atf") return "atf";
+  if (service === "custom" && customProviderId) {
+    return customProviderId as ModelFamily;
+  }
   // "azure" here is added to model names by the Azure key provider to
   // differentiate between Azure and OpenAI variants of the same model.
   if (model.includes("azure")) return getAzureOpenAIModelFamily(model);

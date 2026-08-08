@@ -14,7 +14,9 @@ import {
   GlmZaiCodingKey,
   MoonshotKey,
   AtfKey,
+  CustomKey,
 } from "./shared/key-management";
+import { getCustomProviders } from "./shared/custom-providers";
 import {
   AnthropicModelFamily,
   assertIsKnownModelFamily,
@@ -25,7 +27,7 @@ import {
   LLM_SERVICES,
   LLMService,
   MistralAIModelFamily,
-  MODEL_FAMILY_SERVICE,
+  getServiceForFamily,
   ModelFamily,
   OpenAIModelFamily,
   DeepseekModelFamily,
@@ -147,7 +149,9 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "OpRout_ZAI",
   "OpRout_Nvidia",
   "OpRout_MoonshotAI",
-  "OpRout_Other"
+  "OpRout_Other",
+  // One family per custom provider, in the order they appear in the file.
+  ...getCustomProviders().map((p) => p.id as ModelFamily),
 ];
 
 type KeyPoolKey = ReturnType<typeof keyPool.list>[0];
@@ -174,6 +178,7 @@ const keyIsGlmZaiCodingKey = (k: KeyPoolKey): k is GlmZaiCodingKey =>
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
 const keyIsAtfKey = (k: KeyPoolKey): k is AtfKey => k.service === "atf";
+const keyIsCustomKey = (k: KeyPoolKey): k is CustomKey => k.service === "custom";
 
 /** Stats aggregated across all keys for a given service. */
 type ServiceAggregate = "keys" | "uncheckedKeys" | "orgs";
@@ -264,6 +269,8 @@ export type ServiceInfo = {
     "azure-image"?: string;
     "openrouter"?: string;
     atf?: string;
+    /** Custom providers contribute one entry each, keyed by their id. */
+    [custom: string]: string | undefined;
   };
   proompts?: number;
   tookens?: string;
@@ -374,6 +381,8 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   atf: {
     atf: `%BASE%/atf`,
   },
+  // Filled in per provider by getEndpoints, since these are runtime-defined.
+  custom: {},
 };
 
 const familyStats = new Map<ModelAggregateKey, number>();
@@ -462,6 +471,17 @@ function getEndpoints(baseUrl: string, accessibleFamilies: Set<ModelFamily>) {
     if (service === "azure" && !accessibleFamilies.has("azure-dall-e")) {
       delete endpoints["azure-image"];
     }
+
+    if (service === "custom") {
+      for (const provider of getCustomProviders()) {
+        const hasKeys = keys.some(
+          (k) => k.service === "custom" && k.modelFamilies.includes(provider.id as ModelFamily)
+        );
+        if (hasKeys) {
+          endpoints[provider.id] = `${baseUrl}/${provider.id}`;
+        }
+      }
+    }
   }
   return endpoints;
 }
@@ -543,6 +563,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
   addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
   addToService("atf__keys", k.service === "atf" ? 1 : 0);
+  addToService("custom__keys", k.service === "custom" ? 1 : 0);
 
   let sumInputTokens = 0;
   let sumOutputTokens = 0;
@@ -780,6 +801,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
         addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
       });
       break;
+    case "custom":
+      if (!keyIsCustomKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     default:
       assertNever(k.service);
   }
@@ -822,7 +850,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
 
   // Add service-specific stats to the info object.
   if (config.checkKeys) {
-    const service = MODEL_FAMILY_SERVICE[family];
+    const service = getServiceForFamily(family);
     switch (service) {
       case "openai":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
@@ -921,6 +949,7 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "atf":
+      case "custom":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
     }

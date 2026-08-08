@@ -4,8 +4,10 @@
 .venv
 .vscode
 .idea
+.claude
 build
 greeting.md
 node_modules
+providers.conf
 .windsurfrules
 http-client.private.env.json

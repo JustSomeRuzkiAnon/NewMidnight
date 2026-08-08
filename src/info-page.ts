@@ -10,7 +10,8 @@ import { config } from "./config";
 import { buildInfo, ServiceInfo } from "./service-info";
 import { getLastNImages } from "./shared/file-storage/image-history";
 import { keyPool } from "./shared/key-management";
-import { MODEL_FAMILY_SERVICE, ModelFamily } from "./shared/models";
+import { getServiceForFamily, ModelFamily } from "./shared/models";
+import { getCustomProvider } from "./shared/custom-providers";
 import { withSession } from "./shared/with-session";
 import { injectCsrfToken, checkCsrfToken } from "./shared/inject-csrf";
 import { getUser } from "./shared/users/user-store";
@@ -121,6 +122,15 @@ const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   "OpRout_Other": "OpenRouter (Other)",
 
 };
+
+/** Custom providers aren't in the table above; they carry their own label. */
+function getFriendlyModelFamilyName(family: ModelFamily): string {
+  return (
+    getCustomProvider(family)?.label ??
+    MODEL_FAMILY_FRIENDLY_NAME[family] ??
+    family
+  );
+}
 
 const converter = new showdown.Converter();
 
@@ -267,7 +277,7 @@ This proxy keeps full logs of all prompts and AI responses. Prompt logs are anon
   const waits: string[] = [];
 
   for (const modelFamily of config.allowedModelFamilies) {
-    const service = MODEL_FAMILY_SERVICE[modelFamily];
+    const service = getServiceForFamily(modelFamily);
 
     const hasKeys = keyPool.list().some(
       (k) => k.service === service && k.modelFamilies.includes(modelFamily)
@@ -276,7 +286,7 @@ This proxy keeps full logs of all prompts and AI responses. Prompt logs are anon
     const wait = info[modelFamily]?.estimatedQueueTime;
     if (hasKeys && wait) {
       waits.push(
-        `**${MODEL_FAMILY_FRIENDLY_NAME[modelFamily] || modelFamily}**: ${wait}`
+        `**${getFriendlyModelFamilyName(modelFamily)}**: ${wait}`
       );
     }
   }

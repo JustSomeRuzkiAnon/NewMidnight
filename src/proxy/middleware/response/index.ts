@@ -279,6 +279,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "atf":
         errorPayload.proxy_note = `The upstream ATF proxy rejected the request. Check the error message for details.`;
         break;
+      case "custom":
+        errorPayload.proxy_note = `The upstream ${req.customProviderId} API rejected the request. Check the error message for details.`;
+        break;
       case "openrouter":
         // OpenRouter часто возвращает 400 при модерации или неверных параметрах
         if (errorPayload.error?.code === 400 || errorPayload.error?.message?.includes("moderation")) {
@@ -378,6 +381,12 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         keyPool.disable(req.key!, "revoked");
         await reenqueueRequest(req);
         throw new RetryableError("ATF key was rejected upstream, retrying with different key.");
+      case "custom":
+        keyPool.disable(req.key!, "revoked");
+        await reenqueueRequest(req);
+        throw new RetryableError(
+          `${req.customProviderId} key was rejected upstream, retrying with different key.`
+        );
       case "xai":
         await reenqueueRequest(req);
         throw new RetryableError("XAI key lacks permissions, retrying with different key.");
@@ -427,9 +436,10 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
           await handleMoonshotRateLimitError(req, errorPayload);
           break;
         case "atf":
+        case "custom":
           keyPool.markRateLimited(req.key!);
           await reenqueueRequest(req);
-          throw new RetryableError("ATF rate-limited request re-enqueued.");
+          throw new RetryableError("Rate-limited request re-enqueued.");
       default:
         assertNever(service as never);
     }
@@ -463,6 +473,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "cohere":
       case "qwen":
       case "atf":
+      case "custom":
         errorPayload.proxy_note = `The key assigned to your prompt does not support the requested model.`;
         break;
       default:
@@ -1186,7 +1197,8 @@ const incrementUsage: ProxyResHandlerWithBody = async (_proxyRes, req) => {
         model,
         req.outboundApi,
         { input: req.promptTokens!, output: req.outputTokens! },
-        req.service
+        req.service,
+        req.customProviderId
       );
     }
   }
@@ -1313,7 +1325,7 @@ const countResponseTokens: ProxyResHandlerWithBody = async (
         tokenizer: "api-usage-data",
       };
 
-      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "glm-zai" || req.service === "glm-zai-coding" || req.service === "cohere" || req.service === "qwen" || req.service === "atf") {
+      if (req.service === "openai" || req.service === "azure" || req.service === "deepseek" || req.service === "glm" || req.service === "glm-zai" || req.service === "glm-zai-coding" || req.service === "cohere" || req.service === "qwen" || req.service === "atf" || req.service === "custom") {
         // O1 consumes (a significant amount of) invisible tokens for the chain-
         // of-thought reasoning. We have no way to count these other than to check
         // the response body.

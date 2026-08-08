@@ -34,7 +34,14 @@ export const addKey: ProxyReqMutator = (manager) => {
     // Pass streaming information for GPT-5 models that require verified keys for streaming
     // Pass request body for cache-aware key selection (Anthropic, AWS, GCP)
     const isStreaming = body.stream === true;
-    assignedKey = keyPool.get(body.model, service, needsMultimodal, isStreaming, body);
+    assignedKey = keyPool.get(
+      body.model,
+      service,
+      needsMultimodal,
+      isStreaming,
+      body,
+      req.customProviderId
+    );
   } else {
     switch (outboundApi) {
       // If we are translating between API formats we may need to select a model
@@ -126,6 +133,10 @@ export const addKey: ProxyReqMutator = (manager) => {
       break;
     case "atf":
       // ATF's upstream is another proxy; the key is its user token.
+      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+      break;
+    case "custom":
+      // Same for user-defined providers, which are OpenAI-format upstreams.
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
     case "aws":

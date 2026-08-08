@@ -1,5 +1,6 @@
 import { config } from "../config";
 import { ModelFamily } from "./models";
+import { getCustomProvider } from "./custom-providers";
 
 // Prices are per 1 million tokens.
 const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | undefined> = {
@@ -100,7 +101,9 @@ const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | und
 };
 
 export function getTokenCostDetailsUsd(model: ModelFamily, inputTokens: number, outputTokens?: number): { inputCost: number, outputCost: number, totalCost: number } {
-  const pricing = MODEL_PRICING[model];
+  // Custom providers aren't part of the compile-time family union; their prices
+  // come from the providers file.
+  const pricing = getCustomProvider(model)?.price ?? MODEL_PRICING[model];
 
   if (!pricing) {
     console.warn(`Pricing not found for model family: ${model}. Returning 0 cost for all components.`);

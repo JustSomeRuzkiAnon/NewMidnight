@@ -2,6 +2,7 @@ import { Request } from "express";
 import { z } from "zod";
 import { config } from "../../../../config";
 import { assertNever } from "../../../../shared/utils";
+import { getCustomProvider } from "../../../../shared/custom-providers";
 import { RequestPreprocessor } from "../index";
 
 const CLAUDE_MAX_CONTEXT = config.maxContextTokensAnthropic;
@@ -55,7 +56,14 @@ export const validateContextSize: RequestPreprocessor = async (req) => {
   }
 
   let modelMax: number;
-  if (model.match(/gpt-3.5-turbo-16k/)) {
+  // A custom provider's upstream is arbitrary, so its declared limit wins over
+  // guessing from the model name.
+  const customProvider = req.customProviderId
+    ? getCustomProvider(req.customProviderId)
+    : undefined;
+  if (customProvider) {
+    modelMax = customProvider.contextLimit;
+  } else if (model.match(/gpt-3.5-turbo-16k/)) {
     modelMax = 16384;
   } else if (model.match(/^gpt-4o/)) {
     modelMax = 128000;

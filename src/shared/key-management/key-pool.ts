@@ -4,7 +4,7 @@ import os from "os";
 import schedule from "node-schedule";
 import { config } from "../../config";
 import { logger } from "../../logger";
-import { LLMService, MODEL_FAMILY_SERVICE, ModelFamily } from "../models";
+import { LLMService, ModelFamily, getServiceForFamily } from "../models";
 import { Key, KeyProvider } from "./index";
 import { AnthropicKeyProvider, AnthropicKeyUpdate } from "./anthropic/provider";
 import { OpenAIKeyProvider, OpenAIKeyUpdate } from "./openai/provider";
@@ -23,6 +23,8 @@ import { GlmZaiCodingKeyProvider } from "./glm-zai-coding/provider";
 import { MoonshotKeyProvider } from "./moonshot/provider";
 import { OpenRouterKeyProvider } from "./openrouter/provider";
 import { AtfKeyProvider } from "./atf/provider";
+import { CustomKey, CustomKeyProvider } from "./custom/provider";
+import { getCustomProviders } from "../custom-providers";
 
 type AllowedPartial = OpenAIKeyUpdate | AnthropicKeyUpdate | Partial<GcpKey>;
 
@@ -50,6 +52,9 @@ export class KeyPool {
     this.keyProviders.push(new MoonshotKeyProvider());
     this.keyProviders.push(new OpenRouterKeyProvider());
     this.keyProviders.push(new AtfKeyProvider());
+    for (const provider of getCustomProviders()) {
+      this.keyProviders.push(new CustomKeyProvider(provider));
+    }
   }
 
   public init() {
@@ -63,7 +68,15 @@ export class KeyPool {
     this.scheduleRecheck();
   }
 
-  public get(model: string, service?: LLMService, multimodal?: boolean, streaming?: boolean, requestBody?: any): Key {
+  public get(
+    model: string,
+    service?: LLMService,
+    multimodal?: boolean,
+    streaming?: boolean,
+    requestBody?: any,
+    /** Required when service is "custom", to pick among its providers. */
+    providerId?: string
+  ): Key {
     // hack for some claude requests needing keys with particular permissions
     // even though they use the same models as the non-multimodal requests
     if (multimodal) {
@@ -71,7 +84,11 @@ export class KeyPool {
     }
 
     const queryService = service || this.getServiceForModel(model);
-    return this.getKeyProvider(queryService).get(model, streaming, requestBody);
+    return this.getKeyProvider(queryService, providerId).get(
+      model,
+      streaming,
+      requestBody
+    );
   }
 
   public list(): Omit<Key, "key">[] {
@@ -84,7 +101,7 @@ export class KeyPool {
    * used to indicate a key that is still valid but has exceeded its quota.
    */
   public disable(key: Key, reason: "quota" | "revoked"): void {
-    const service = this.getKeyProvider(key.service);
+    const service = this.getKeyProvider(key.service, this.providerIdOf(key));
     service.disable(key);
     service.update(key.hash, { isRevoked: reason === "revoked" });
     if (
@@ -99,7 +116,8 @@ export class KeyPool {
       service instanceof GlmZaiCodingKeyProvider ||
       service instanceof MoonshotKeyProvider ||
       service instanceof OpenRouterKeyProvider ||
-      service instanceof AtfKeyProvider
+      service instanceof AtfKeyProvider ||
+      service instanceof CustomKeyProvider
     ) {
       service.update(key.hash, { isOverQuota: reason === "quota" });
     }
@@ -114,7 +132,7 @@ export class KeyPool {
    * properties.
    */
   public update(key: Key, props: AllowedPartial): void {
-    const service = this.getKeyProvider(key.service);
+    const service = this.getKeyProvider(key.service, this.providerIdOf(key));
     service.update(key.hash, props);
   }
 
@@ -127,7 +145,7 @@ export class KeyPool {
   }
 
   public incrementUsage(key: Key, modelName: string, usage: { input: number; output: number }): void {
-    const provider = this.getKeyProvider(key.service);
+    const provider = this.getKeyProvider(key.service, this.providerIdOf(key));
     // Assuming the provider's incrementUsage expects a modelFamily.
     // We need a robust way to get modelFamily from modelName here.
     // This might involve calling a method similar to getModelFamilyForRequest from user-store,
@@ -153,17 +171,18 @@ export class KeyPool {
   }
 
   public getLockoutPeriod(family: ModelFamily): number {
-    const service = MODEL_FAMILY_SERVICE[family];
-    return this.getKeyProvider(service).getLockoutPeriod(family);
+    const service = getServiceForFamily(family);
+    // A custom provider's family is named after the provider itself.
+    return this.getKeyProvider(service, family).getLockoutPeriod(family);
   }
 
   public markRateLimited(key: Key): void {
-    const provider = this.getKeyProvider(key.service);
+    const provider = this.getKeyProvider(key.service, this.providerIdOf(key));
     provider.markRateLimited(key.hash);
   }
 
   public updateRateLimits(key: Key, headers: http.IncomingHttpHeaders): void {
-    const provider = this.getKeyProvider(key.service);
+    const provider = this.getKeyProvider(key.service, this.providerIdOf(key));
     if (provider instanceof OpenAIKeyProvider) {
       provider.updateRateLimits(key.hash, headers);
     }
@@ -175,8 +194,10 @@ export class KeyPool {
       return;
     }
 
-    const provider = this.getKeyProvider(service);
-    provider.recheck();
+    // "custom" may have several providers behind it, so recheck them all.
+    this.keyProviders
+      .filter((provider) => provider.service === service)
+      .forEach((provider) => provider.recheck());
   }
   
   /**
@@ -245,8 +266,26 @@ export class KeyPool {
     throw new Error(`Unknown service for model '${model}'`);
   }
 
-  private getKeyProvider(service: LLMService): KeyProvider {
+  /**
+   * Custom providers all share the service "custom", so they are additionally
+   * disambiguated by their id.
+   */
+  private getKeyProvider(service: LLMService, providerId?: string): KeyProvider {
+    if (service === "custom") {
+      const provider = this.keyProviders.find(
+        (p) => p instanceof CustomKeyProvider && p.providerId === providerId
+      );
+      if (!provider) {
+        throw new Error(`Unknown custom provider '${providerId}'`);
+      }
+      return provider;
+    }
     return this.keyProviders.find((provider) => provider.service === service)!;
+  }
+
+  /** Id of the custom provider a key belongs to, if any. */
+  private providerIdOf(key: Key): string | undefined {
+    return (key as Partial<CustomKey>).providerId;
   }
 
   /**

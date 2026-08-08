@@ -24,6 +24,7 @@ export const applyQuotaLimits: RequestPreprocessor = (req) => {
       api: req.outboundApi,
       requested: requestedTokens,
       service: req.service,
+      customProviderId: req.customProviderId,
     })
   ) {
     throw new QuotaExceededError(

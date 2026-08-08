@@ -20,6 +20,8 @@ import { glmZaiCoding } from "./glm-zai-coding";
 import { moonshot } from "./moonshot";
 import { openRouter } from "./openrouter";
 import { atf } from "./atf";
+import { createCustomProviderRouter } from "./custom-provider";
+import { getCustomProviders } from "../shared/custom-providers";
 import { sendErrorToClient } from "./middleware/response/error-generator";
 
 const proxyRouter = express.Router();
@@ -69,6 +71,11 @@ proxyRouter.use("/glm-zai-coding", addV1, glmZaiCoding);
 proxyRouter.use("/moonshot", addV1, moonshot);
 proxyRouter.use("/openrouter", addV1, openRouter);
 proxyRouter.use("/atf", addV1, atf);
+
+// User-defined providers from the providers file, mounted at /proxy/<id>.
+for (const provider of getCustomProviders()) {
+  proxyRouter.use(`/${provider.id}`, addV1, createCustomProviderRouter(provider));
+}
 
 // Redirect browser requests to the homepage.
 proxyRouter.get("*", (req, res, next) => {

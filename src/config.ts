@@ -4,7 +4,12 @@ import type firebase from "firebase-admin";
 import path from "path";
 import pino from "pino";
 import type { LLMService, ModelFamily } from "./shared/models";
-import { MODEL_FAMILIES } from "./shared/models";
+import { LLM_SERVICES, MODEL_FAMILIES } from "./shared/models";
+import {
+  getCustomProviders,
+  getProvidersFilePath,
+  resolveProviderKeys,
+} from "./shared/custom-providers";
 import { generateUnixTimePseudoQrPdf } from "./shared/pdf-gen";
 dotenv.config();
 
@@ -859,6 +864,42 @@ export async function assertConfigIsValid() {
     startupLogger.info(
       { baseUrl: config.atfBaseUrl, pathStyle: config.atfPathStyle },
       "ATF endpoint configured."
+    );
+  }
+
+  // Custom providers are declared in the providers file; the file itself was
+  // already parsed and validated when `models.ts` derived model families from
+  // it, so what's left is anything that needs the environment to be loaded.
+  const reservedRoutes = new Set<string>([
+    ...LLM_SERVICES,
+    "openai-image",
+    "azure",
+    "gcp",
+  ]);
+  const providersFile = getProvidersFilePath();
+  for (const provider of getCustomProviders()) {
+    if (reservedRoutes.has(provider.id)) {
+      throw new Error(
+        `${providersFile}:${provider.line} — идентификатор "${provider.id}" занят встроенным эндпоинтом /proxy/${provider.id}`
+      );
+    }
+
+    if (resolveProviderKeys(provider).length === 0) {
+      const where =
+        provider.keys.kind === "env"
+          ? `переменная окружения ${provider.keys.name} не задана или пуста`
+          : "не заданы ключи";
+      throw new Error(`${providersFile}:${provider.line} — ${where}`);
+    }
+
+    startupLogger.info(
+      {
+        id: provider.id,
+        type: provider.type,
+        url: provider.url,
+        pathStyle: provider.pathStyle,
+      },
+      "Custom provider configured."
     );
   }
 

@@ -87,6 +87,23 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   const adapter = new SSEStreamAdapter(streamOptions);
   // Transformer converts server-sent events from one vendor's API message
   // format to another.
+  // When a custom provider disguises a model, the upstream's events still name
+  // the real one, so it has to be swapped back on the way out.
+  const alias =
+    req.publicModelName && req.publicModelName !== req.body?.model
+      ? { real: String(req.body.model), public: req.publicModelName }
+      : undefined;
+  const aliasPattern = alias
+    ? new RegExp(
+        `("model"\\s*:\\s*)"${alias.real.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+        "g"
+      )
+    : undefined;
+  const rewriteRawModel = (msg: string) =>
+    aliasPattern ? msg.replace(aliasPattern, `$1${JSON.stringify(alias!.public)}`) : msg;
+  const rewriteEventModel = (msg: any) =>
+    alias && msg?.model === alias.real ? { ...msg, model: alias.public } : msg;
+
   const transformer = new SSEMessageTransformer({
     inputFormat: req.outboundApi, // The format of the upstream service's events
     outputFormat: req.inboundApi, // The format the client requested
@@ -96,10 +113,12 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
     requestedModel: req.body.model,
   })
     .on("originalMessage", (msg: string) => {
-      if (prefersNativeEvents) res.write(msg);
+      if (prefersNativeEvents) res.write(rewriteRawModel(msg));
     })
     .on("data", (msg) => {
-      if (!prefersNativeEvents) res.write(`data: ${JSON.stringify(msg)}\n\n`);
+      if (!prefersNativeEvents) {
+        res.write(`data: ${JSON.stringify(rewriteEventModel(msg))}\n\n`);
+      }
       aggregator.addEvent(msg);
     });
 
