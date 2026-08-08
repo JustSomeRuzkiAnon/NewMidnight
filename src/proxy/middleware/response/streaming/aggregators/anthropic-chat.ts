@@ -43,9 +43,13 @@ export function mergeEventsForAnthropicChat(
       return acc;
     }
 
-    acc.stop_reason = event.choices[0].finish_reason ?? "";
-    if (event.choices[0].delta.content) {
-      acc.content[0].text += event.choices[0].delta.content;
+    // Events without choices (e.g. a final usage-only chunk) carry no content.
+    const choice = event.choices?.[0];
+    if (choice) {
+      acc.stop_reason = choice.finish_reason ?? "";
+      if (choice.delta?.content) {
+        acc.content[0].text += choice.delta.content;
+      }
     }
 
     // OpenAI events may include usage data (extended by our transformer)

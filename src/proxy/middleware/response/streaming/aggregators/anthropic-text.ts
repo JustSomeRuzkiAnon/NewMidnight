@@ -37,9 +37,13 @@ export function mergeEventsForAnthropicText(
       return acc;
     }
 
-    acc.stop_reason = event.choices[0].finish_reason ?? "";
-    if (event.choices[0].delta.content) {
-      acc.completion += event.choices[0].delta.content;
+    // Events without choices (e.g. a final usage-only chunk) carry no content.
+    const choice = event.choices?.[0];
+    if (choice) {
+      acc.stop_reason = choice.finish_reason ?? "";
+      if (choice.delta?.content) {
+        acc.completion += choice.delta.content;
+      }
     }
 
     return acc;

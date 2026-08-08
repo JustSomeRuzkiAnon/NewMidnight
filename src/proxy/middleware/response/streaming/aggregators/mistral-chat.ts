@@ -23,14 +23,18 @@ export function mergeEventsForMistralChat(
   };
   merged = events.reduce((acc, event, i) => {
     // The first event will only contain role assignment and response metadata
+    // Events without choices (e.g. a final usage-only chunk) carry no content.
+    const choice = event.choices?.[0];
+    if (!choice) return acc;
+
     if (i === 0) {
-      acc.choices[0].message.role = event.choices[0].delta.role ?? "assistant";
+      acc.choices[0].message.role = choice.delta?.role ?? "assistant";
       return acc;
     }
 
-    acc.choices[0].finish_reason = event.choices[0].finish_reason ?? "";
-    if (event.choices[0].delta.content) {
-      acc.choices[0].message.content += event.choices[0].delta.content;
+    acc.choices[0].finish_reason = choice.finish_reason ?? "";
+    if (choice.delta?.content) {
+      acc.choices[0].message.content += choice.delta.content;
     }
 
     return acc;

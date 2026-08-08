@@ -39,22 +39,27 @@ export function mergeEventsForOpenAIChat(
       acc.object = event.object;
       acc.created = event.created;
       acc.model = event.model;
-      acc.choices = [
-        {
-          index: 0,
-          message: {
-            role: event.choices[0].delta.role ?? "assistant",
-            content: "",
-          },
-          finish_reason: null,
-        },
-      ];
-      return acc;
     }
 
-    acc.choices[0].finish_reason = event.choices[0].finish_reason;
-    if (event.choices[0].delta.content) {
-      acc.choices[0].message.content += event.choices[0].delta.content;
+    // Some upstreams emit events with no choices at all -- most commonly a
+    // final usage-only chunk -- so every access has to tolerate that.
+    const choice = event.choices?.[0];
+    if (choice) {
+      if (acc.choices.length === 0) {
+        acc.choices = [
+          {
+            index: 0,
+            message: { role: choice.delta?.role ?? "assistant", content: "" },
+            finish_reason: null,
+          },
+        ];
+      }
+
+      acc.choices[0].finish_reason =
+        choice.finish_reason ?? acc.choices[0].finish_reason;
+      if (choice.delta?.content) {
+        acc.choices[0].message.content += choice.delta.content;
+      }
     }
 
     // Accumulate usage data from events (OpenAI may send this in the final event)
@@ -70,5 +75,18 @@ export function mergeEventsForOpenAIChat(
 
     return acc;
   }, merged);
+
+  // A stream that never carried a choice still has to produce a well-formed
+  // response for the non-streaming middleware that runs after this.
+  if (merged.choices.length === 0) {
+    merged.choices = [
+      {
+        index: 0,
+        message: { role: "assistant", content: "" },
+        finish_reason: null,
+      },
+    ];
+  }
+
   return merged;
 }

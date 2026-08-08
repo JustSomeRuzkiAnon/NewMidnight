@@ -24,8 +24,12 @@ export function mergeEventsForMistralText(
       return acc;
     }
 
-    acc.outputs[0].text += event.choices[0].delta.content ?? "";
-    acc.outputs[0].stop_reason = event.choices[0].finish_reason ?? "";
+    // Events without choices (e.g. a final usage-only chunk) carry no content.
+    const choice = event.choices?.[0];
+    if (!choice) return acc;
+
+    acc.outputs[0].text += choice.delta?.content ?? "";
+    acc.outputs[0].stop_reason = choice.finish_reason ?? "";
 
     return acc;
   }, merged);
