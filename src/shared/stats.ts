@@ -3,6 +3,7 @@ import { ModelFamily } from "./models";
 
 // Prices are per 1 million tokens.
 const MODEL_PRICING: Record<ModelFamily, { input: number; output: number } | undefined> = {
+  "atf": { input: 0, output: 0 }, // ATF proxies another proxy; per-model pricing is unknown
   "deepseek": { input: 0.55, output: 2.19 }, // DeepSeek Reasoner (standard price, input cache miss)
   "glm": { input: 0.40, output: 1.60 }, // GLM (bigmodel.cn) pricing: 40 cents input, $1.6 output per 1M tokens
   "glm-zai": { input: 0.40, output: 1.60 }, // GLM-ZAI (z.ai) pricing: same as GLM

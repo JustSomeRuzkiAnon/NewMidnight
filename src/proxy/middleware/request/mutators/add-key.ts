@@ -124,6 +124,10 @@ export const addKey: ProxyReqMutator = (manager) => {
       // OpenRouter использует стандартный Authorization Bearer, как OpenAI
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
+    case "atf":
+      // ATF's upstream is another proxy; the key is its user token.
+      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+      break;
     case "aws":
     case "gcp":
     case "google-ai":

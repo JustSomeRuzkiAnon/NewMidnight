@@ -110,3 +110,4 @@ export { GlmZaiKey } from "./glm-zai/provider";
 export { GlmZaiCodingKey } from "./glm-zai-coding/provider";
 export { MoonshotKey } from "./moonshot/provider";
 export { OpenRouterKey } from "./openrouter/provider";
+export { AtfKey } from "./atf/provider";

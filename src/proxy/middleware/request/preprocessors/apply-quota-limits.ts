@@ -23,6 +23,7 @@ export const applyQuotaLimits: RequestPreprocessor = (req) => {
       model: req.body.model,
       api: req.outboundApi,
       requested: requestedTokens,
+      service: req.service,
     })
   ) {
     throw new QuotaExceededError(

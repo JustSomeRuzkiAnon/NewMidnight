@@ -28,6 +28,7 @@ import {
   OPENROUTER_FAMILY_MAP,
   MODEL_FAMILIES,
   ModelFamily,
+  LLMService,
 } from "../models";
 import { assertNever } from "../utils";
 import { User, UserTokenCounts, UserTokenLimits, UserUpdate } from "./schema";
@@ -296,11 +297,12 @@ export function incrementTokenCount(
   token: string,
   model: string,
   api: APIFormat,
-  consumption: { input: number; output: number }
+  consumption: { input: number; output: number },
+  service?: LLMService
 ) {
   const user = users.get(token);
   if (!user) return;
-  const modelFamily = getModelFamilyForQuotaUsage(model, api);
+  const modelFamily = getModelFamilyForQuotaUsage(model, api, service);
   const existingCounts = user.tokenCounts[modelFamily] ?? { input: 0, output: 0 };
   
   // Ensure consumption values are non-negative
@@ -361,17 +363,19 @@ export function hasAvailableQuota({
   model,
   api,
   requested,
+  service,
 }: {
   userToken: string;
   model: string;
   api: APIFormat;
   requested: number;
+  service?: LLMService;
 }) {
   const user = users.get(userToken);
   if (!user) return false;
   if (user.type === "special") return true;
 
-  const modelFamily = getModelFamilyForQuotaUsage(model, api);
+  const modelFamily = getModelFamilyForQuotaUsage(model, api, service);
   const { tokenCounts, tokenLimits } = user;
   const currentUsage = tokenCounts[modelFamily] ?? { input: 0, output: 0 };
 
@@ -736,8 +740,12 @@ async function flushUsersToSQLite() { // Added
 
 function getModelFamilyForQuotaUsage(
   model: string,
-  api: APIFormat
+  api: APIFormat,
+  service?: LLMService
 ): ModelFamily {
+  // ATF proxies an arbitrary upstream, so its models can't be identified by
+  // name and are all billed against the single "atf" family.
+  if (service === "atf") return "atf";
   // "azure" here is added to model names by the Azure key provider to
   // differentiate between Azure and OpenAI variants of the same model.
   if (model.includes("azure")) return getAzureOpenAIModelFamily(model);

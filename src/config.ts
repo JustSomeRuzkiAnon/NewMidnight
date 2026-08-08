@@ -78,6 +78,25 @@ type Config = {
    * Comma-delimited list of Moonshot API keys.
    */
   moonshotKey?: string;
+  /**
+   * Comma-delimited list of ATF keys. ATF is another OpenAI-compatible reverse
+   * proxy, so these are that proxy's user tokens/passwords, not vendor API keys.
+   */
+  atfKey?: string;
+  /**
+   * Base URL of the ATF upstream proxy, without a trailing slash. Change this
+   * to point the `atf` endpoint at a different proxy; no code changes needed.
+   * Must be an https URL.
+   *
+   * @example `ATF_BASE_URL=https://example.trycloudflare.com/proxy`
+   */
+  atfBaseUrl: string;
+  /**
+   * How to build the ATF upstream path.
+   * - `v1`: `<ATF_BASE_URL>/v1/chat/completions` (default)
+   * - `bare`: `<ATF_BASE_URL>/chat/completions`
+   */
+  atfPathStyle: "v1" | "bare";
 
   /**
    * Comma-delimited list of AWS credentials. Each credential item should be a
@@ -545,6 +564,15 @@ export const config: Config = {
   xaiKey: getEnvWithDefault("XAI_KEY", ""),
   cohereKey: getEnvWithDefault("COHERE_KEY", ""),
   moonshotKey: getEnvWithDefault("MOONSHOT_KEY", ""),
+  atfKey: getEnvWithDefault("ATF_KEY", ""),
+  atfBaseUrl: getEnvWithDefault(
+    "ATF_BASE_URL",
+    "https://claims-feels-walker-const.trycloudflare.com/proxy"
+  ),
+  atfPathStyle: getEnvWithDefault(
+    "ATF_PATH_STYLE",
+    "v1"
+  ) as Config["atfPathStyle"],
   awsCredentials: getEnvWithDefault("AWS_CREDENTIALS", ""),
   gcpCredentials: getEnvWithDefault("GCP_CREDENTIALS", ""),
   azureCredentials: getEnvWithDefault("AZURE_CREDENTIALS", ""),
@@ -692,6 +720,7 @@ function generateSigningKey() {
     config.glmZaiKey,
     config.glmZaiCodingKey,
     config.moonshotKey,
+    config.atfKey,
     config.awsCredentials,
     config.gcpCredentials,
     config.azureCredentials,
@@ -801,6 +830,38 @@ export async function assertConfigIsValid() {
     );
   }
 
+  // Trailing slashes would produce double slashes once the request path is
+  // appended, which some upstreams reject.
+  config.atfBaseUrl = config.atfBaseUrl.trim().replace(/\/+$/, "");
+
+  if (!["v1", "bare"].includes(config.atfPathStyle)) {
+    throw new Error(
+      `Invalid ATF_PATH_STYLE: ${config.atfPathStyle}. Must be 'v1' or 'bare'.`
+    );
+  }
+
+  if (config.atfKey) {
+    let atfUrl: URL;
+    try {
+      atfUrl = new URL(config.atfBaseUrl);
+    } catch {
+      throw new Error(
+        `Invalid ATF_BASE_URL: ${config.atfBaseUrl}. Must be an absolute URL, e.g. https://example.com/proxy.`
+      );
+    }
+    // The proxy middleware picks its outgoing agent before the target is
+    // resolved, so it always uses the HTTPS agent for this endpoint.
+    if (atfUrl.protocol !== "https:") {
+      throw new Error(
+        `Invalid ATF_BASE_URL: ${config.atfBaseUrl}. Must use https.`
+      );
+    }
+    startupLogger.info(
+      { baseUrl: config.atfBaseUrl, pathStyle: config.atfPathStyle },
+      "ATF endpoint configured."
+    );
+  }
+
   if (Object.values(config.httpAgent || {}).filter(Boolean).length === 0) {
     delete config.httpAgent;
   } else if (config.httpAgent) {
@@ -874,6 +935,9 @@ export const OMITTED_KEYS = [
   "glmZaiKey",
   "glmZaiCodingKey",
   "moonshotKey",
+  "atfKey",
+  "atfBaseUrl",
+  "atfPathStyle",
   "mistralAIKey",
   "awsCredentials",
   "gcpCredentials",

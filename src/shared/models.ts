@@ -23,7 +23,8 @@ export type LLMService =
   | "glm-zai"
   | "glm-zai-coding"
   | "moonshot"
-  | "openrouter";
+  | "openrouter"
+  | "atf";
 
 export type OpenAIModelFamily =
   | "turbo"
@@ -75,6 +76,11 @@ export type GlmModelFamily = "glm";
 export type GlmZaiModelFamily = "glm-zai";
 export type GlmZaiCodingModelFamily = "glm-zai-coding";
 export type MoonshotModelFamily = "moonshot";
+/**
+ * ATF is an OpenAI-compatible reverse proxy which may serve models from any
+ * upstream, so all of its models are tracked as a single family.
+ */
+export type AtfModelFamily = "atf";
 export type OpenRouterModelFamily = 
   | "openrouter"
   | "OpRout_OpenAI"
@@ -125,11 +131,13 @@ export type ModelFamily =
   | GlmZaiModelFamily
   | GlmZaiCodingModelFamily
   | MoonshotModelFamily
-  | OpenRouterModelFamily;
+  | OpenRouterModelFamily
+  | AtfModelFamily;
 
 export const MODEL_FAMILIES = (<A extends readonly ModelFamily[]>(
   arr: A & ([ModelFamily] extends [A[number]] ? unknown : never)
 ) => arr)([
+  "atf",
   "moonshot",
   "qwen",
   "glm",
@@ -241,12 +249,14 @@ export const LLM_SERVICES = (<A extends readonly LLMService[]>(
   "glm-zai",
   "glm-zai-coding",
   "moonshot",
-  "openrouter"
+  "openrouter",
+  "atf"
 ] as const);
 
 export const MODEL_FAMILY_SERVICE: {
   [f in ModelFamily]: LLMService;
 } = {
+  atf: "atf",
   moonshot: "moonshot",
   qwen: "qwen",
   glm: "glm",
@@ -549,7 +559,9 @@ export function getModelFamilyForRequest(req: Request): ModelFamily {
   } else if (req.service === "glm-zai-coding") {
     modelFamily = "glm-zai-coding";
   } else if (req.service === "openrouter") {
-    modelFamily = 'openrouter'  
+    modelFamily = 'openrouter'
+  } else if (req.service === "atf") {
+    modelFamily = "atf";
   } else {
     switch (req.outboundApi) {
       case "anthropic-chat":

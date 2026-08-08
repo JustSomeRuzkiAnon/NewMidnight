@@ -32,6 +32,7 @@ const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   "glm-zai": "GLM-ZAI",
   "glm-zai-coding": "GLM-ZAI-CODING",
   cohere: "Cohere",
+  atf: "ATF",
   deepseek: "Deepseek",
   xai: "Grok",
   moonshot: "Moonshot",

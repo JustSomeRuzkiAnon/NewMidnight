@@ -22,6 +22,7 @@ import { GlmZaiKeyProvider } from "./glm-zai/provider";
 import { GlmZaiCodingKeyProvider } from "./glm-zai-coding/provider";
 import { MoonshotKeyProvider } from "./moonshot/provider";
 import { OpenRouterKeyProvider } from "./openrouter/provider";
+import { AtfKeyProvider } from "./atf/provider";
 
 type AllowedPartial = OpenAIKeyUpdate | AnthropicKeyUpdate | Partial<GcpKey>;
 
@@ -48,6 +49,7 @@ export class KeyPool {
     this.keyProviders.push(new GlmZaiCodingKeyProvider());
     this.keyProviders.push(new MoonshotKeyProvider());
     this.keyProviders.push(new OpenRouterKeyProvider());
+    this.keyProviders.push(new AtfKeyProvider());
   }
 
   public init() {
@@ -96,7 +98,8 @@ export class KeyPool {
       service instanceof GlmZaiKeyProvider ||
       service instanceof GlmZaiCodingKeyProvider ||
       service instanceof MoonshotKeyProvider ||
-      service instanceof OpenRouterKeyProvider
+      service instanceof OpenRouterKeyProvider ||
+      service instanceof AtfKeyProvider
     ) {
       service.update(key.hash, { isOverQuota: reason === "quota" });
     }

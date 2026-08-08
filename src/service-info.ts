@@ -13,6 +13,7 @@ import {
   GlmZaiKey,
   GlmZaiCodingKey,
   MoonshotKey,
+  AtfKey,
 } from "./shared/key-management";
 import {
   AnthropicModelFamily,
@@ -36,6 +37,7 @@ import {
   GlmZaiCodingModelFamily,
   MoonshotModelFamily,
   OpenRouterModelFamily,
+  AtfModelFamily,
 } from "./shared/models";
 import { getCostSuffix, getTokenCostUsd, prettyTokens } from "./shared/stats";
 import { getUniqueIps } from "./proxy/rate-limit";
@@ -123,6 +125,7 @@ const MODEL_FAMILY_ORDER: ModelFamily[] = [
   "gcp-claude",
   "gcp-claude-opus",
   // Other services
+  "atf",
   "deepseek",
   "xai",
   "cohere",
@@ -170,6 +173,7 @@ const keyIsGlmZaiCodingKey = (k: KeyPoolKey): k is GlmZaiCodingKey =>
   k.service === "glm-zai-coding";
 const keyIsMoonshotKey = (k: KeyPoolKey): k is MoonshotKey =>
   k.service === "moonshot";
+const keyIsAtfKey = (k: KeyPoolKey): k is AtfKey => k.service === "atf";
 
 /** Stats aggregated across all keys for a given service. */
 type ServiceAggregate = "keys" | "uncheckedKeys" | "orgs";
@@ -259,6 +263,7 @@ export type ServiceInfo = {
     "openai-image"?: string;
     "azure-image"?: string;
     "openrouter"?: string;
+    atf?: string;
   };
   proompts?: number;
   tookens?: string;
@@ -280,7 +285,8 @@ export type ServiceInfo = {
   & { [f in GlmZaiModelFamily]?: BaseFamilyInfo }
   & { [f in GlmZaiCodingModelFamily]?: BaseFamilyInfo }
   & { [f in MoonshotModelFamily]?: BaseFamilyInfo }
-  & { [f in OpenRouterModelFamily]?: BaseFamilyInfo };
+  & { [f in OpenRouterModelFamily]?: BaseFamilyInfo }
+  & { [f in AtfModelFamily]?: BaseFamilyInfo };
 // https://stackoverflow.com/a/66661477
 // type DeepKeyOf<T> = (
 //   [T] extends [never]
@@ -364,6 +370,9 @@ const SERVICE_ENDPOINTS: { [s in LLMService]: Record<string, string> } = {
   },
   openrouter: {
     openrouter: `%BASE%/openrouter`,
+  },
+  atf: {
+    atf: `%BASE%/atf`,
   },
 };
 
@@ -533,6 +542,7 @@ function addKeyToAggregates(k: KeyPoolKey) {
   addToService("glm-zai-coding__keys", k.service === "glm-zai-coding" ? 1 : 0);
   addToService("moonshot__keys", k.service === "moonshot" ? 1 : 0);
   addToService("openrouter__keys", k.service === "openrouter" ? 1 : 0);
+  addToService("atf__keys", k.service === "atf" ? 1 : 0);
 
   let sumInputTokens = 0;
   let sumOutputTokens = 0;
@@ -763,6 +773,13 @@ function addKeyToAggregates(k: KeyPoolKey) {
     case "moonshot":
       k.modelFamilies.forEach(incrementGenericFamilyStats);
       break;
+    case "atf":
+      if (!keyIsAtfKey(k)) throw new Error("Invalid key type");
+      k.modelFamilies.forEach((f) => {
+        incrementGenericFamilyStats(f);
+        addToFamily(`${f}__overQuota`, k.isOverQuota ? 1 : 0);
+      });
+      break;
     default:
       assertNever(k.service);
   }
@@ -901,6 +918,9 @@ function getInfoForFamily(family: ModelFamily): BaseFamilyInfo {
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
       case "moonshot":
+        info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
+        break;
+      case "atf":
         info.overQuotaKeys = familyStats.get(`${family}__overQuota`) || 0;
         break;
     }

@@ -19,6 +19,7 @@ import { glmZai } from "./glm-zai";
 import { glmZaiCoding } from "./glm-zai-coding";
 import { moonshot } from "./moonshot";
 import { openRouter } from "./openrouter";
+import { atf } from "./atf";
 import { sendErrorToClient } from "./middleware/response/error-generator";
 
 const proxyRouter = express.Router();
@@ -67,6 +68,7 @@ proxyRouter.use("/glm-zai", addV1, glmZai);
 proxyRouter.use("/glm-zai-coding", addV1, glmZaiCoding);
 proxyRouter.use("/moonshot", addV1, moonshot);
 proxyRouter.use("/openrouter", addV1, openRouter);
+proxyRouter.use("/atf", addV1, atf);
 
 // Redirect browser requests to the homepage.
 proxyRouter.get("*", (req, res, next) => {
