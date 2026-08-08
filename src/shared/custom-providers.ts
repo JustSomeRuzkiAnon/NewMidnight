@@ -107,10 +107,14 @@ function parseSections(text: string, file: string): RawSection[] {
 
     // An indented line that isn't itself `known-key = ...` continues the
     // previous value, so long lists can be spread over several lines.
+    // Note that a value may start with '[' -- model names on some upstreams
+    // are prefixed like `[v]gemini-2.5-pro` -- so only a line that is entirely
+    // a bracketed name counts as a section header here.
     const startsNewKey = KNOWN_KEYS.some((k) =>
       new RegExp(`^${k}\\s*=`).test(line)
     );
-    if (/^\s/.test(raw) && lastKey && !line.startsWith("[") && !startsNewKey) {
+    const isSectionHeader = /^\[[^\[\]]*\]$/.test(line);
+    if (/^\s/.test(raw) && lastKey && !isSectionHeader && !startsNewKey) {
       const current = sections[sections.length - 1];
       const entry = current?.entries.get(lastKey);
       if (entry) {
