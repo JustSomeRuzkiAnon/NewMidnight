@@ -13,7 +13,13 @@ import path from "path";
 import dotenv from "dotenv";
 
 /** API format spoken by a custom provider's upstream. */
-export type CustomProviderType = "openai";
+export type CustomProviderType = "openai" | "anthropic" | "google-ai";
+
+export const CUSTOM_PROVIDER_TYPES: CustomProviderType[] = [
+  "openai",
+  "anthropic",
+  "google-ai",
+];
 
 /**
  * A model the provider exposes. `real` is what the upstream calls it, `name`
@@ -324,11 +330,12 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
   };
 
   const typeEntry = required("type");
-  if (typeEntry.value.toLowerCase() !== "openai") {
+  const type = typeEntry.value.toLowerCase() as CustomProviderType;
+  if (!CUSTOM_PROVIDER_TYPES.includes(type)) {
     fail(
       file,
       typeEntry.line,
-      `type "${typeEntry.value}" пока не поддерживается; доступен только openai`
+      `type "${typeEntry.value}" не поддерживается; доступны ${CUSTOM_PROVIDER_TYPES.join(", ")}`
     );
   }
 
@@ -365,7 +372,7 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
 
   return {
     id,
-    type: "openai",
+    type,
     url: parseUrl(file, required("url")),
     pathStyle,
     contextLimit: contextEntry ? parseContext(file, contextEntry) : 200_000,

@@ -133,7 +133,7 @@ const googleAIBlockingResponseHandler: ProxyResHandlerWithBody = async (
   res.status(200).json({ ...newBody, proxy: body.proxy });
 };
 
-function transformGoogleAIResponse(
+export function transformGoogleAIResponse(
   resBody: Record<string, any>,
   req: Request
 ): Record<string, any> {

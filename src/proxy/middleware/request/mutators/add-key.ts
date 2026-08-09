@@ -3,6 +3,7 @@ import { containsImageContent } from "../../../../shared/api-schemas/anthropic";
 import { Key, OpenAIKey, keyPool } from "../../../../shared/key-management";
 import { isEmbeddingsRequest } from "../../common";
 import { assertNever } from "../../../../shared/utils";
+import { getCustomProvider } from "../../../../shared/custom-providers";
 import { ProxyReqMutator } from "../index";
 
 export const addKey: ProxyReqMutator = (manager) => {
@@ -53,18 +54,46 @@ export const addKey: ProxyReqMutator = (manager) => {
       case "mistral-ai":
       case "mistral-text":
       case "google-ai":
-        assignedKey = keyPool.get(body.model, service, undefined, undefined, body);
+        assignedKey = keyPool.get(
+          body.model,
+          service,
+          undefined,
+          undefined,
+          body,
+          req.customProviderId
+        );
         break;
       case "openai-text":
-        assignedKey = keyPool.get("gpt-3.5-turbo-instruct", service);
+        assignedKey = keyPool.get(
+          "gpt-3.5-turbo-instruct",
+          service,
+          undefined,
+          undefined,
+          undefined,
+          req.customProviderId
+        );
         break;
       case "openai-image":
         // Use the actual model from the request body instead of defaulting to dall-e-3
         // This ensures that gpt-image-1 requests get keys that are verified for gpt-image-1
-        assignedKey = keyPool.get(body.model, service);
+        assignedKey = keyPool.get(
+          body.model,
+          service,
+          undefined,
+          undefined,
+          undefined,
+          req.customProviderId
+        );
         break;
       case "openai-responses":
-        assignedKey = keyPool.get(body.model, service);
+        assignedKey = keyPool.get(
+          body.model,
+          service,
+          undefined,
+          undefined,
+          undefined,
+          req.customProviderId
+        );
         break;
       case "openai":
         throw new Error(
@@ -135,10 +164,22 @@ export const addKey: ProxyReqMutator = (manager) => {
       // ATF's upstream is another proxy; the key is its user token.
       manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
       break;
-    case "custom":
-      // Same for user-defined providers, which are OpenAI-format upstreams.
-      manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+    case "custom": {
+      // User-defined providers authenticate the way their upstream's API does.
+      // (google-ai puts the key in the URL, so it never reaches this mutator.)
+      const provider = req.customProviderId
+        ? getCustomProvider(req.customProviderId)
+        : undefined;
+      if (provider?.type === "anthropic") {
+        manager.setHeader("X-API-Key", assignedKey.key);
+        if (!manager.request.headers["anthropic-version"]) {
+          manager.setHeader("anthropic-version", "2023-06-01");
+        }
+      } else {
+        manager.setHeader("Authorization", `Bearer ${assignedKey.key}`);
+      }
       break;
+    }
     case "aws":
     case "gcp":
     case "google-ai":

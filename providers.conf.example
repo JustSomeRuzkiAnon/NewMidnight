@@ -17,7 +17,26 @@
 [example]
 # --- обязательные параметры ---
 
-# Формат API апстрима. Пока поддерживается только openai.
+# Формат API апстрима: openai, anthropic или google-ai.
+# От него зависят эндпоинты, которые появятся у /proxy/<id>, и способ
+# авторизации на апстриме:
+#
+#   openai     POST /v1/chat/completions
+#              ключ уходит как Authorization: Bearer
+#
+#   anthropic  POST /v1/messages            (родной формат)
+#              POST /v1/chat/completions    (запрос в формате OpenAI,
+#                                            переводится в Anthropic)
+#              ключ уходит как X-API-Key + anthropic-version
+#
+#   google-ai  POST /v1beta/models/<модель>:generateContent
+#              POST /v1beta/models/<модель>:streamGenerateContent
+#              POST /v1/chat/completions    (запрос в формате OpenAI,
+#                                            переводится в Gemini)
+#              ключ уходит в URL как ?key=
+#
+# GET /v1/models есть у всех типов; у google-ai дополнительно
+# GET /v1beta/models в родном формате Gemini.
 type = openai
 
 # Базовый адрес апстрима, только https. Слеш на конце можно не убирать.
@@ -67,6 +86,8 @@ models =
 #   v1   -> <url>/v1/chat/completions   (по умолчанию)
 #   bare -> <url>/chat/completions
 # Если апстрим отвечает 404 — переключите на bare.
+# Для типа google-ai не используется: там версия API (v1beta/v1alpha)
+# и имя модели входят в путь по правилам самого Gemini.
 path-style = v1
 
 # Максимальный размер контекста. Понимает 128k, 1m и обычные числа.
@@ -90,7 +111,13 @@ label = Example
 
 # Ещё один провайдер — просто новая секция.
 #
-# [second]
-# type = openai
-# url  = https://another.example.com/proxy
-# keys = $SECOND_KEY
+# [claudeproxy]
+# type   = anthropic
+# url    = https://another.example.com/proxy/anthropic
+# keys   = $CLAUDE_PROXY_KEY
+# models = claude-sonnet-4-5 as claude-3-5-sonnet-20241022, *
+#
+# [gemproxy]
+# type   = google-ai
+# url    = https://another.example.com/proxy/google-ai
+# keys   = $GEM_PROXY_KEY

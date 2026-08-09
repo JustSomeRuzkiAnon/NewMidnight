@@ -122,10 +122,27 @@ export class CustomKeyChecker {
 
     {
       const response = await axios.get(url, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key.key}`,
-        },
+        // Each upstream API authenticates differently, and a proxy in front of
+        // it will only recognise its own style.
+        ...(this.provider.type === "anthropic"
+          ? {
+              headers: {
+                "Content-Type": "application/json",
+                "X-API-Key": key.key,
+                "anthropic-version": "2023-06-01",
+              },
+            }
+          : this.provider.type === "google-ai"
+            ? {
+                headers: { "Content-Type": "application/json" },
+                params: { key: key.key },
+              }
+            : {
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${key.key}`,
+                },
+              }),
         timeout: CHECK_TIMEOUT,
         validateStatus: () => true,
         ...(agent ? { httpAgent: agent, httpsAgent: agent, proxy: false } : {}),
