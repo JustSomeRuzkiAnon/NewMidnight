@@ -120,8 +120,10 @@ const MODEL_FAMILY_FRIENDLY_NAME: { [f in ModelFamily]: string } = {
   "OpRout_Nvidia": "OpenRouter (Nvidia)",
   "OpRout_MoonshotAI": "OpenRouter (Moonshot)",
   "OpRout_Other": "OpenRouter (Other)",
+
 };
 
+/** Custom providers aren't in the table above; they carry their own label. */
 function getFriendlyModelFamilyName(family: ModelFamily): string {
   return (
     getCustomProvider(family)?.label ??
@@ -132,129 +134,10 @@ function getFriendlyModelFamilyName(family: ModelFamily): string {
 
 const converter = new showdown.Converter();
 
+/* optional markdown greeting */
 const customGreeting = fs.existsSync("greeting.md")
-  ? `<div id="servergreeting">${converter.makeHtml(fs.readFileSync("greeting.md", "utf8"))}</div>`
+  ? `<div id="servergreeting">${fs.readFileSync("greeting.md", "utf8")}</div>`
   : "";
-
-/* ────────────────  SHARED CSS COMPONENTS  ──────────────────── */
-
-const starryBackgroundCss = `
-html, body { margin: 0; padding: 0; min-height: 100vh; }
-body {
-  color: #e0e0e0;
-  background-color: #090a0f;
-}
-
-.bg-gradient {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
-  z-index: -2;
-}
-
-.stars, .twinkling-1, .twinkling-2, .meteor-container {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  z-index: -1;
-  pointer-events: none;
-}
-
-/* Статичные мелкие звезды */
-.stars {
-  background-image: 
-    radial-gradient(1px 1px at 25px 5px, white, transparent),
-    radial-gradient(1px 1px at 50px 25px, white, transparent),
-    radial-gradient(1.5px 1.5px at 125px 20px, white, transparent),
-    radial-gradient(1px 1px at 150px 80px, white, transparent),
-    radial-gradient(2px 2px at 225px 15px, white, transparent),
-    radial-gradient(1px 1px at 250px 65px, white, transparent),
-    radial-gradient(1px 1px at 275px 120px, white, transparent),
-    radial-gradient(1.5px 1.5px at 300px 45px, white, transparent),
-    radial-gradient(1px 1px at 350px 95px, white, transparent);
-  background-size: 400px 400px;
-}
-
-/* Мерцающие крестики - группа 1 */
-.twinkling-1 {
-  background-image: 
-    radial-gradient(1.5px 12px at 30px 130px, white, transparent),
-    radial-gradient(12px 1.5px at 30px 130px, white, transparent),
-    radial-gradient(1px 10px at 420px 80px, rgba(255,255,255,0.8), transparent),
-    radial-gradient(10px 1px at 420px 80px, rgba(255,255,255,0.8), transparent);
-  background-size: 500px 500px;
-  animation: blink 4s infinite ease-in-out;
-}
-
-/* Мерцающие крестики - группа 2 (другая частота) */
-.twinkling-2 {
-  background-image: 
-    radial-gradient(2px 15px at 250px 250px, white, transparent),
-    radial-gradient(15px 2px at 250px 250px, white, transparent),
-    radial-gradient(2.5px 18px at 500px 350px, rgba(255,255,255,0.9), transparent),
-    radial-gradient(18px 2.5px at 500px 350px, rgba(255,255,255,0.9), transparent);
-  background-size: 650px 650px;
-  animation: blink 6s infinite ease-in-out;
-  animation-delay: 2s;
-}
-
-@keyframes blink {
-  0% { opacity: 0; }
-  50% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* Падающие звезды (Метеоры) */
-.meteor-container { overflow: hidden; }
-.meteor {
-  position: absolute;
-  width: 150px;
-  height: 2px;
-  background: linear-gradient(to right, rgba(255, 255, 255, 1), transparent);
-  transform: rotate(-45deg);
-  opacity: 0;
-  animation: meteor-fall linear infinite;
-}
-.meteor::before {
-  content: '';
-  position: absolute;
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 10px 2px #fff;
-  left: 0; top: -1px;
-}
-.m1 { top: -20%; left: 80%; animation-duration: 6s; animation-delay: 1s; }
-.m2 { top: 10%; left: 110%; animation-duration: 8s; animation-delay: 4s; }
-.m3 { top: -10%; left: 40%; animation-duration: 10s; animation-delay: 7s; }
-
-@keyframes meteor-fall {
-  0% { opacity: 0; transform: translate(0, 0) rotate(-45deg); }
-  5% { opacity: 1; }
-  15% { opacity: 0; transform: translate(-600px, 600px) rotate(-45deg); }
-  100% { opacity: 0; }
-}
-
-.glass-panel {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-`;
-
-const backgroundHtml = `
-  <div class="bg-gradient"></div>
-  <div class="stars"></div>
-  <div class="twinkling-1"></div>
-  <div class="twinkling-2"></div>
-  <div class="meteor-container">
-    <div class="meteor m1"></div>
-    <div class="meteor m2"></div>
-    <div class="meteor m3"></div>
-  </div>
-`;
 
 /* ────────────────  Login page  ──────────────────────── */
 function renderLoginPage(csrf: string, error?: string) {
@@ -266,84 +149,40 @@ function renderLoginPage(csrf: string, error?: string) {
 <html>
 <head>
   <title>${pageTitle} – Login</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    ${starryBackgroundCss}
-    body {
-      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
+    body{font-family:Arial, sans-serif;display:flex;justify-content:center;
+         align-items:center;height:100vh;margin:0;padding:20px;background:#f5f5f5;}
+    .login-container{background:#fff;border-radius:8px;box-shadow:0 4px 8px rgba(0,0,0,.1);
+         padding:30px;width:100%;max-width:400px;text-align:center;}
+    .logo-image{max-width:200px;margin-bottom:20px;}
+    .form-group{margin-bottom:20px;}
+    input[type=text], input[type=password]{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;
+         box-sizing:border-box;font-size:16px;}
+    button{background:#4caf50;color:#fff;border:none;padding:12px 20px;border-radius:4px;
+         cursor:pointer;font-size:16px;width:100%;}
+    button:hover{background:#45a049;}
+    .error-message{color:#f44336;margin-bottom:15px;}
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #2c2c2c; color: #e0e0e0; }
+      .login-container { background: #383838; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 1px solid #4a4a4a; }
+      input[type=text], input[type=password] { background: #4a4a4a; color: #e0e0e0; border: 1px solid #5a5a5a; }
+      input[type=text]::placeholder, input[type=password]::placeholder { color: #999; }
+      button { background: #007bff; } /* Using a blue for dark mode button */
+      button:hover { background: #0056b3; }
+      .error-message { color: #ff8a80; } /* Lighter red for errors in dark mode */
     }
-    .login-container {
-      padding: 40px;
-      width: 100%;
-      max-width: 400px;
-      text-align: center;
-      box-sizing: border-box;
-    }
-    .logo-image { max-width: 100%; height: auto; max-height: 100px; margin-bottom: 30px; }
-    h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 30px; font-weight: 300; letter-spacing: 1px;}
-    .form-group { margin-bottom: 25px; text-align: left; }
-    input[type=text], input[type=password] {
-      width: 100%;
-      padding: 12px 15px;
-      margin-top: 8px;
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
-      box-sizing: border-box;
-      font-size: 16px;
-      color: #fff;
-      transition: all 0.2s;
-    }
-    input[type=text]:focus, input[type=password]:focus {
-      outline: none;
-      border-color: #007bff;
-      background: rgba(255,255,255,0.15);
-      box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
-    }
-    input[type=text]::placeholder, input[type=password]::placeholder { color: rgba(255,255,255,0.5); }
-    
-    button {
-      background: #007bff;
-      color: #fff;
-      border: none;
-      padding: 12px 20px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: 600;
-      width: 100%;
-      transition: background 0.2s, transform 0.1s;
-      letter-spacing: 0.5px;
-    }
-    button:hover { background: #0069d9; }
-    button:active { transform: translateY(1px); }
-    
-    .error-message {
-      background: rgba(244, 67, 54, 0.2);
-      border: 1px solid #f44336;
-      color: #ff8a80;
-      padding: 10px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 14px;
-    }
-    label { font-size: 14px; color: rgba(255,255,255,0.7); }
   </style>
 </head>
 <body>
-  ${backgroundHtml}
-  <div class="login-container glass-panel">
-    ${config.loginImageUrl ? `<img src="${config.loginImageUrl}" alt="Logo" class="logo-image">` : `<h1>${escapeHtml(pageTitle)}</h1>`}
+  <div class="login-container">
+    ${config.loginImageUrl ? `<img src="${config.loginImageUrl}" alt="Logo" class="logo-image">` : ''}
     ${errBlock}
     <form method="POST" action="${LOGIN_ROUTE}">
       <div class="form-group">
         ${config.serviceInfoAuthMode === "password"
-          ? `<label for="password">Service Password</label><input type="password" id="password" name="password" required placeholder="••••••••">`
-          : `<label for="token">User Token</label><input type="text" id="token" name="token" required placeholder="your-unique-token">`}
+          ? `<input type="password" id="password" name="password" required placeholder="Service Password">`
+          : `<input type="text" id="token" name="token" required placeholder="Your token">`}
         <input type="hidden" name="_csrf" value="${csrf}">
       </div>
       <button type="submit">Access Dashboard</button>
@@ -394,171 +233,76 @@ export function renderPage(info: ServiceInfo) {
 <head>
   <meta charset="utf-8" />
   <meta name="robots" content="noindex" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
+  <link rel="stylesheet" href="/res/css/reset.css" />
+  <link rel="stylesheet" href="/res/css/sakura.css" />
+  <link rel="stylesheet" href="/res/css/sakura-dark.css"
+        media="screen and (prefers-color-scheme: dark)" />
   <style>
-    ${starryBackgroundCss}
-    body {
-      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      box-sizing: border-box;
-      line-height: 1.6;
-      padding: 20px;
-    }
-
-    .main-container {
-      width: 100%;
-      max-width: 1000px;
-      padding: 40px;
-      box-sizing: border-box;
-      margin-top: 20px;
-      margin-bottom: 40px;
-      align-self: flex-start;
-    }
-
-    h1, h2, h3 { font-weight: 300; letter-spacing: 1px; color: #fff; }
-    h1 { font-size: 2.5rem; margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
-    h2 { font-size: 1.8rem; margin-top: 1.5em; color: #a2cfff; }
-    
-    a { color: #80bfff; text-decoration: none; transition: color 0.2s; }
-    a:hover { color: #fff; text-decoration: underline; }
-
-    hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 2em 0; }
-
-    #servergreeting {
-      background: rgba(0,0,0,0.3);
-      padding: 20px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.05);
-      margin-bottom: 2em;
-    }
-    #servergreeting p:first-child { margin-top: 0; }
-    #servergreeting p:last-child { margin-bottom: 0; }
-
-    .queue-times {
-      font-family: 'Courier New', Courier, monospace;
-      background: rgba(0,0,0,0.3);
-      padding: 15px;
-      border-radius: 8px;
-      color: #81d4fa;
-      font-size: 0.9em;
-      margin: 1em 0;
-    }
-
-    .self-service-links {
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 10px 20px;
-      margin: 2em 0;
-      padding: 15px;
-      background: rgba(255,255,255,0.03);
-      border-radius: 8px;
-    }
-    .self-service-links a {
-      font-size: 0.9em;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 600;
-    }
-
-    #recent-images {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 15px;
-      margin-top: 1.5em;
-    }
-    .recent-image {
-      aspect-ratio: 1 / 1;
-      overflow: hidden;
-      border-radius: 8px;
-      border: 2px solid rgba(255,255,255,0.1);
-      transition: transform 0.2s, border-color 0.2s;
-    }
-    .recent-image:hover {
-      transform: scale(1.05);
-      border-color: #80bfff;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-    .recent-image img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .view-all-images { text-align: center; margin-top: 1.5em; font-size: 0.9em;}
-
-    pre.raw-json {
-      background: #0a0e17;
-      color: #a5d6a7;
-      padding: 20px;
-      border-radius: 8px;
-      overflow-x: auto;
-      font-size: 0.85em;
-      border: 1px solid #1a2233;
-      box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
-    }
-
-    @media (max-width: 600px) {
-      .main-container { padding: 20px; margin-top: 10px; }
-      h1 { font-size: 1.8rem; }
-      #recent-images { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-    }
+    body{font-family:sans-serif;padding:1em;max-width:900px;margin:0;}
+    .self-service-links{display:flex;justify-content:center;margin-bottom:1em;
+                        padding:0.5em;font-size:0.8em;}
+    .self-service-links a{margin:0 0.5em;}
   </style>
 </head>
 <body>
-  ${backgroundHtml}
-  <div class="main-container glass-panel">
-    ${headerHtml}
-    <hr/>
-    ${getSelfServiceLinks()}
-    <h2>Service Info</h2>
-    <pre class="raw-json">${JSON.stringify(info, null, 2)}</pre>
-  </div>
+  ${headerHtml}
+  <hr/>
+  ${getSelfServiceLinks()}
+  <h2>Service Info</h2>
+  <pre>${JSON.stringify(info, null, 2)}</pre>
 </body>
 </html>`;
 }
 
 /* ────────────────  header & helper functions  ──────────────── */
-
+/*     (all copied verbatim from original file)                  */
 function buildInfoPageHeader(info: ServiceInfo) {
   const title = getServerTitle();
-  let html = `<h1>${escapeHtml(title)}</h1>`;
+  let infoBody = `# ${title}`;
 
-  html += customGreeting; 
+  if (config.promptLogging) {
+    infoBody += `\n## Prompt Logging Enabled
+This proxy keeps full logs of all prompts and AI responses. Prompt logs are anonymous and do not contain IP addresses or timestamps.
+
+[You can see the type of data logged here, along with the rest of the code.](https://gitgud.io/khanon/oai-reverse-proxy/-/blob/main/src/shared/prompt-logging/index.ts).
+
+**If you are uncomfortable with this, don't send prompts to this proxy!**`;
+  }
 
   if (config.staticServiceInfo) {
-    return html;
+    return converter.makeHtml(infoBody + customGreeting);
   }
 
   const waits: string[] = [];
+
   for (const modelFamily of config.allowedModelFamilies) {
     const service = getServiceForFamily(modelFamily);
+
     const hasKeys = keyPool.list().some(
       (k) => k.service === service && k.modelFamilies.includes(modelFamily)
     );
+
     const wait = info[modelFamily]?.estimatedQueueTime;
     if (hasKeys && wait) {
-      waits.push(`<strong>${getFriendlyModelFamilyName(modelFamily)}</strong>: ${wait}`);
+      waits.push(
+        `**${getFriendlyModelFamilyName(modelFamily)}**: ${wait}`
+      );
     }
   }
 
-  if (waits.length > 0) {
-    html += `<h2>Estimated Queue Times</h2>`;
-    html += `<div class="queue-times">${waits.join(" <span style='color:rgba(255,255,255,0.2)'>|</span> ")}</div>`;
-  }
+  infoBody += "\n\n" + waits.join(" / ");
+  infoBody += customGreeting;
+  infoBody += buildRecentImageSection();
 
-  html += buildRecentImageSection();
-
-  return html;
+  return converter.makeHtml(infoBody);
 }
 
 function getSelfServiceLinks() {
   if (config.gatekeeper !== "user_token") return "";
-  const links = [["Check Token", "/user/lookup"]];
+  const links = [["Check your user token", "/user/lookup"]];
   if (config.captchaMode !== "none") {
-    links.unshift(["Request Token", "/user/captcha"]);
+    links.unshift(["Request a user token", "/user/captcha"]);
   }
   return `<div class="self-service-links">${links
     .map(([t, l]) => `<a href="${l}">${t}</a>`)
@@ -571,7 +315,7 @@ function getServerTitle() {
     return `${process.env.SPACE_AUTHOR_NAME} / ${process.env.SPACE_TITLE}`;
   if (process.env.RENDER)
     return `Render / ${process.env.RENDER_SERVICE_NAME}`;
-  return "AI Proxy Tunnel";
+  return "Tunnel";
 }
 
 function buildRecentImageSection() {
@@ -581,33 +325,39 @@ function buildRecentImageSection() {
     "gpt-image",
     "azure-gpt-image",
   ];
+  // Condition 1: Is the feature enabled via config?
+  // Condition 2: Is at least one relevant image model family allowed in config?
   if (
     !config.showRecentImages ||
     imageModels.every((f) => !config.allowedModelFamilies.includes(f))
   ) {
-    return "";
+    return ""; // Exit if feature is disabled or no relevant models are allowed
   }
 
+  // Condition 3: Are there any actual images to display?
   const recentImages = getLastNImages(12).reverse();
   if (recentImages.length === 0) {
+    // If the feature is enabled and models are allowed, but no images exist,
+    // do not render the section, including its title.
     return "";
   }
 
-  let html = `<h2>Recent Generations</h2>`;
-  html += `<div id="recent-images">`;
+  // If all conditions pass (feature enabled, models allowed, images exist), build and return the HTML
+  let html = `<h2>Recent Image Generations</h2>`;
+  html += `<div style="display:flex;flex-wrap:wrap;" id="recent-images">`;
   for (const { url, prompt } of recentImages) {
     const thumbUrl = url.replace(/\.png$/, "_t.jpg");
     const escapedPrompt = escapeHtml(prompt);
-    html += `<div class="recent-image">
-<a href="${url}" target="_blank"><img src="${thumbUrl}" title="${escapedPrompt}" alt="${escapedPrompt}"/></a></div>`;
+    html += `<div style="margin:0.5em" class="recent-image">
+<a href="${url}" target="_blank"><img src="${thumbUrl}" title="${escapedPrompt}"
+ alt="${escapedPrompt}" style="max-width:150px;max-height:150px;"/></a></div>`;
   }
-  html += `</div><p class="view-all-images">
-<a href="/user/image-history">View full gallery →</a></p>`;
+  html += `</div><p style="clear:both;text-align:center;">
+<a href="/user/image-history">View all recent images</a></p>`;
   return html;
 }
 
 function escapeHtml(unsafe: string) {
-  if (typeof unsafe !== 'string') return '';
   return unsafe
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -617,6 +367,7 @@ function escapeHtml(unsafe: string) {
     .replace(/\[/g, "&#91;")
     .replace(/]/g, "&#93;");
 }
+
 
 function getExternalUrlForHuggingfaceSpaceId(spaceId: string) {
   try {
@@ -638,9 +389,11 @@ infoPageRouter.use(
   checkCsrfToken
 );
 
+/* login attempt */
 infoPageRouter.post(LOGIN_ROUTE, (req, res) => {
   if (config.serviceInfoAuthMode === "password") {
     const password = (req.body.password || "").trim();
+    // Simple string comparison; for production, consider a timing-safe comparison library
     if (config.serviceInfoPassword && password === config.serviceInfoPassword) {
       req.session!.infoPageAuthed = true;
       return res.redirect("/");
@@ -650,18 +403,22 @@ infoPageRouter.post(LOGIN_ROUTE, (req, res) => {
         .send(renderLoginPage(res.locals.csrfToken, "Invalid password. Please try again."));
     }
   } else {
+    // Token-based authentication (using any valid user token)
     const token = (req.body.token || "").trim();
-    const user = getUser(token); 
+    const user = getUser(token); // returns undefined if invalid
     
     if (user && !user.disabledAt) {
+      // Only allow access if user exists AND is not disabled
       req.session!.infoPageAuthed = true;
       return res.redirect("/");
     } else if (user && user.disabledAt) {
+      // User exists but is disabled
       const reason = user.disabledReason || "Your account has been disabled";
       return res
         .status(401)
         .send(renderLoginPage(res.locals.csrfToken, `Access denied: ${reason}`));
     } else {
+      // User doesn't exist
       return res
         .status(401)
         .send(renderLoginPage(res.locals.csrfToken, "Invalid token. Please try again."));
@@ -669,10 +426,14 @@ infoPageRouter.post(LOGIN_ROUTE, (req, res) => {
   }
 });
 
+/* GET /  – either login form or info page */
 if (config.enableInfoPageLogin) {
   infoPageRouter.get(LOGIN_ROUTE, requireLogin, handleInfoPage);
 } else {
   infoPageRouter.get(LOGIN_ROUTE, handleInfoPage);
 }
 
+/*  ─── Removed the public /status route :  simply not added ─── */
+
 export { infoPageRouter };
+
