@@ -266,6 +266,101 @@ body {
   100% { opacity: 0; }
 }
 
+/* Луна */
+.moon-container {
+  position: fixed;
+  top: -20px;
+  right: -20px;
+  /* Ровно 2/3 от свободного пространства справа */
+  width: clamp(220px, calc((100vw - 1000px) * 0.333), 800px);
+  aspect-ratio: 1;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.moon {
+  width: 100%;
+  aspect-ratio: 1;
+  position: relative;
+  container-type: inline-size;
+  --lit:    #fcfbfe;
+  --face:   #f5f1fe;
+  --crater: #b9b5c9;
+  --halo:   6.629cqw;
+}
+
+.moon i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: var(--crater);
+  transform-origin: 0 0;
+}
+.moon i.lit  { background: var(--lit); }
+.moon i.face { background: var(--face); }
+.moon i.halo { filter: blur(var(--halo)); }
+
+/* Кратеры луны */
+.moon i:nth-child(1){width:78.0227cqw;height:78.0227cqw;transform:translate(10.9886cqw,10.9886cqw)}
+.moon i:nth-child(2){width:74.3707cqw;height:74.3707cqw;transform:translate(12.8582cqw,12.8052cqw)}
+.moon i:nth-child(3){width:67.7984cqw;height:67.7984cqw;transform:translate(13.5501cqw,13.4971cqw)}
+.moon i:nth-child(4){width:5.227cqw;height:6.6706cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.88478,-0.46601,0.51612,0.85652,0,0) translate(-7.1124cqw,49.627cqw)}
+.moon i:nth-child(5){width:10.0284cqw;height:8.539cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.67358,0.73911,-0.73911,0.67358,0,0) translate(63.933cqw,18.3369cqw)}
+.moon i:nth-child(6){width:11.9852cqw;height:4.8919cqw;transform:translate(42.7868cqw,13.8294cqw)}
+.moon i:nth-child(7){width:6.1691cqw;height:7.7693cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.92583,0.37795,-0.37795,0.92583,0,0) translate(77.1801cqw,42.1868cqw)}
+.moon i:nth-child(8){width:5.4481cqw;height:3.978cqw;transform:translate(42.7862cqw,53.5306cqw)}
+.moon i:nth-child(9){width:1.9025cqw;height:2.4214cqw;transform:translate(41.835cqw,51.1093cqw)}
+.moon i:nth-child(10){width:7.1776cqw;height:7.9559cqw;transform:translate(54.0284cqw,67.7995cqw)}
+.moon i:nth-child(11){width:3.1132cqw;height:4.9292cqw;transform:translate(56.5363cqw,64.8592cqw)}
+.moon i:nth-child(12){width:2.5078cqw;height:2.9402cqw;transform:translate(62.0708cqw,72.2098cqw)}
+.moon i:nth-child(13){width:7.0912cqw;height:7.0912cqw;transform:translate(61.0331cqw,63.9944cqw)}
+.moon i:nth-child(14){width:7.783cqw;height:10.8097cqw;transform:translate(58.8711cqw,56.6438cqw)}
+.moon i:nth-child(15){width:2.7673cqw;height:4.0644cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.81229,0.58325,-0.58325,0.81229,0,0) translate(99.1901cqw,8.4933cqw)}
+.moon i:nth-child(16){width:9.6855cqw;height:9.1666cqw;transform:translate(64.2328cqw,55.4332cqw)}
+.moon i:nth-child(17){width:5.3616cqw;height:5.0157cqw;transform:translate(60.6007cqw,50.5039cqw)}
+.moon i:nth-child(18){width:7.319cqw;height:9.9201cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.9037,0.42817,-0.3239,0.94609,0,0) translate(88.6176cqw,10.1494cqw)}
+.moon i:nth-child(19){width:4.6698cqw;height:4.4104cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.75106,-0.66024,0.66024,0.75106,0,0) translate(5.5837cqw,71.7899cqw)}
+.moon i:nth-child(20){width:2.8538cqw;height:4.0644cqw;transform:translate(75.6477cqw,37.5323cqw)}
+.moon i:nth-child(21){width:4.1509cqw;height:5.7075cqw;transform:translate(75.7342cqw,43.8452cqw)}
+.moon i:nth-child(22){width:8.5613cqw;height:8.9937cqw;transform:translate(62.3302cqw,43.4128cqw)}
+.moon i:nth-child(23){width:6.6588cqw;height:8.9937cqw;transform:translate(68.8161cqw,40.6455cqw)}
+.moon i:nth-child(24){width:5.794cqw;height:8.3883cqw;transform:translate(68.2107cqw,46.4395cqw)}
+.moon i:nth-child(25){width:6.7452cqw;height:9.2531cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.96502,-0.26219,0.26219,0.96502,0,0) translate(60.5148cqw,51.3715cqw)}
+.moon i:nth-child(26){width:4.8427cqw;height:8.0424cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.86635,-0.49944,0.49944,0.86635,0,0) translate(49.649cqw,60.054cqw)}
+.moon i:nth-child(27){width:3.2861cqw;height:2.1619cqw;transform:translate(62.7626cqw,20.7557cqw)}
+.moon i:nth-child(28){width:5.794cqw;height:7.1776cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.95419,-0.29921,0.29921,0.95419,0,0) translate(56.9124cqw,42.7343cqw)}
+.moon i:nth-child(29){width:4.1509cqw;height:3.7185cqw;transform:translate(58.0063cqw,18.8532cqw)}
+.moon i:nth-child(30){width:4.4104cqw;height:4.0644cqw;transform:translate(62.9356cqw,38.3106cqw)}
+.moon i:nth-child(31){width:3.1132cqw;height:3.1132cqw;transform:translate(58.9575cqw,39.6942cqw)}
+.moon i:nth-child(32){width:6.0534cqw;height:8.8207cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.81167,0.58411,-0.58411,0.81167,0,0) translate(73.2838cqw,-2.9986cqw)}
+.moon i:nth-child(33){width:4.6698cqw;height:7.0047cqw;transform:translate(43.1322cqw,43.5857cqw)}
+.moon i:nth-child(34){width:6.3993cqw;height:4.9292cqw;transform:translate(45.813cqw,43.6722cqw)}
+.moon i:nth-child(35){width:4.0644cqw;height:3.0267cqw;transform:translate(44.1699cqw,40.4725cqw)}
+.moon i:nth-child(36){width:3.3726cqw;height:5.4481cqw;transform:translate(44.3428cqw,35.0245cqw)}
+.moon i:nth-child(37){width:4.4968cqw;height:5.8805cqw;transform:translate(44.6888cqw,27.8468cqw)}
+.moon i:nth-child(38){width:5.1022cqw;height:5.794cqw;transform:translate(49.618cqw,26.4632cqw)}
+.moon i:nth-child(39){width:2.5943cqw;height:2.7673cqw;transform:translate(40.8837cqw,24.5607cqw)}
+.moon i:nth-child(40){width:2.5078cqw;height:1.5566cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.98205,0.18861,-0.18861,0.98205,0,0) translate(36.782cqw,21.5649cqw)}
+.moon i:nth-child(41){width:2.5943cqw;height:2.2484cqw;transform:translate(30.0741cqw,29.0575cqw)}
+.moon i:nth-child(42){width:1.9025cqw;height:1.7296cqw;transform:translate(33.2738cqw,29.4899cqw)}
+.moon i:nth-child(43){width:2.9402cqw;height:2.7673cqw;transform:translate(36.6463cqw,29.7493cqw)}
+.moon i:nth-child(44){width:5.1022cqw;height:4.9292cqw;transform:translate(39.846cqw,29.3169cqw)}
+.moon i:nth-child(45){width:1.9025cqw;height:2.4214cqw;transform:translate(39.7596cqw,29.144cqw)}
+.moon i:nth-child(46){width:7.4371cqw;height:4.5833cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.98359,0.18042,-0.18042,0.98359,0,0) translate(51.6876cqw,12.7951cqw)}
+.moon i:nth-child(47){width:9.0801cqw;height:13.577cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.91805,0.39646,-0.39646,0.91805,0,0) translate(62.7805cqw,4.0021cqw)}
+.moon i:nth-child(48){width:9.9449cqw;height:6.9182cqw;transform:translate(52.6448cqw,21.6204cqw)}
+.moon i:nth-child(49){width:7.61cqw;height:9.3396cqw;transform:translate(62.5032cqw,29.7493cqw)}
+.moon i:nth-child(50){width:4.0644cqw;height:4.0644cqw;transform:translate(54.4608cqw,28.6251cqw)}
+.moon i:nth-child(51){width:9.6855cqw;height:6.4858cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.51282,0.8585,-0.8585,0.51282,0,0) translate(54.7117cqw,-44.8999cqw)}
+.moon i:nth-child(52){width:4.7563cqw;height:6.6588cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.91707,0.39873,-0.39873,0.91707,0,0) translate(70.9237cqw,3.8573cqw)}
+.moon i:nth-child(53){width:4.4968cqw;height:3.0267cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.71369,0.70047,-0.70047,0.71369,0,0) translate(47.6587cqw,16.6554cqw)}
+.moon i:nth-child(54){width:8.3398cqw;height:7.1012cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.67358,0.73911,-0.73911,0.67358,0,0) translate(64.7773cqw,19.0558cqw)}
+.moon i:nth-child(55){width:6.8717cqw;height:10.2749cqw;transform:translate(-4.9242cqw,0.7197cqw) matrix(0.91805,0.39646,-0.39646,0.91805,0,0) translate(63.6601cqw,5.7501cqw)}
+.moon i:nth-child(56){width:3.8915cqw;height:3.4591cqw;transform:translate(43.1322cqw,53.4442cqw)}
+.moon i:nth-child(57){width:4.7563cqw;height:2.8538cqw;transform:translate(43.9105cqw,23.6094cqw)}
+.moon i:nth-child(58){width:10.8962cqw;height:4.6698cqw;transform:translate(42.6134cqw,13.2321cqw)}
+
 .glass-panel {
   background: rgba(255, 255, 255, 0.03);
   border-radius: 16px;
@@ -285,6 +380,18 @@ const backgroundHtml = `
     <div class="meteor m1"></div>
     <div class="meteor m2"></div>
     <div class="meteor m3"></div>
+  </div>
+  <div class="moon-container">
+    <div class="moon" role="img" aria-label="Moon">
+      <i class="lit halo"></i><i class="lit"></i><i class="face"></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i class="face"></i><i class="face"></i><i class="face"></i><i class="face"></i>
+      <i class="face"></i><i class="face"></i>
+    </div>
   </div>
 `;
 
@@ -314,6 +421,7 @@ function renderLoginPage(csrf: string, error?: string) {
       max-width: 400px;
       text-align: center;
       box-sizing: border-box;
+      z-index: 1;
     }
     .logo-image { max-width: 100%; height: auto; max-height: 100px; margin-bottom: 30px; }
     h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 30px; font-weight: 300; letter-spacing: 1px;}
@@ -447,6 +555,7 @@ export function renderPage(info: ServiceInfo) {
       margin-top: 20px;
       margin-bottom: 40px;
       align-self: flex-start;
+      z-index: 1;
     }
 
     h1, h2, h3 { font-weight: 300; letter-spacing: 1px; color: #fff; }
@@ -455,7 +564,6 @@ export function renderPage(info: ServiceInfo) {
     
     a { color: #80bfff; text-decoration: none; transition: color 0.2s; }
     a:hover { color: #fff; text-decoration: underline; }
-
     hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 2em 0; }
 
     #servergreeting {
