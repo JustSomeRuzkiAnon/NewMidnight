@@ -1,5 +1,5 @@
 /*  ──────────────────────────────────────────────────────────────
-    Login-gated info page
+    Login-gated info page - BEAUTIFIED VERSION
     drop-in replacement for src/info-page.ts
     ──────────────────────────────────────────────────────────── */
 
@@ -159,40 +159,72 @@ body {
   pointer-events: none;
 }
 
-/* Статичные мелкие звезды */
+/* Статичные мелкие звезды - удвоенная плотность на 600x600 */
 .stars {
   background-image: 
-    radial-gradient(1px 1px at 25px 5px, white, transparent),
-    radial-gradient(1px 1px at 50px 25px, white, transparent),
-    radial-gradient(1.5px 1.5px at 125px 20px, white, transparent),
-    radial-gradient(1px 1px at 150px 80px, white, transparent),
-    radial-gradient(2px 2px at 225px 15px, white, transparent),
-    radial-gradient(1px 1px at 250px 65px, white, transparent),
-    radial-gradient(1px 1px at 275px 120px, white, transparent),
-    radial-gradient(1.5px 1.5px at 300px 45px, white, transparent),
-    radial-gradient(1px 1px at 350px 95px, white, transparent);
-  background-size: 400px 400px;
+    radial-gradient(1px 1px at 45px 65px, white, transparent),
+    radial-gradient(1px 1px at 150px 125px, white, transparent),
+    radial-gradient(1.5px 1.5px at 250px 40px, white, transparent),
+    radial-gradient(1px 1px at 380px 90px, white, transparent),
+    radial-gradient(2px 2px at 520px 50px, white, transparent),
+    radial-gradient(1px 1px at 80px 250px, white, transparent),
+    radial-gradient(1.5px 1.5px at 190px 320px, white, transparent),
+    radial-gradient(1px 1px at 320px 200px, white, transparent),
+    radial-gradient(1px 1px at 450px 280px, white, transparent),
+    radial-gradient(2px 2px at 580px 350px, white, transparent),
+    radial-gradient(1px 1px at 50px 450px, white, transparent),
+    radial-gradient(1px 1px at 170px 520px, white, transparent),
+    radial-gradient(1.5px 1.5px at 290px 480px, white, transparent),
+    radial-gradient(1px 1px at 410px 550px, white, transparent),
+    radial-gradient(1px 1px at 540px 460px, white, transparent),
+    radial-gradient(1.5px 1.5px at 350px 380px, white, transparent),
+    radial-gradient(1px 1px at 120px 580px, white, transparent),
+    radial-gradient(2px 2px at 480px 150px, white, transparent),
+    radial-gradient(1px 1px at 100px 80px, white, transparent),
+    radial-gradient(1.5px 1.5px at 220px 180px, white, transparent),
+    radial-gradient(1px 1px at 400px 20px, white, transparent),
+    radial-gradient(1px 1px at 550px 180px, white, transparent),
+    radial-gradient(1px 1px at 20px 300px, white, transparent),
+    radial-gradient(2px 2px at 120px 400px, white, transparent),
+    radial-gradient(1px 1px at 250px 270px, white, transparent),
+    radial-gradient(1px 1px at 400px 350px, white, transparent),
+    radial-gradient(1.5px 1.5px at 500px 250px, white, transparent),
+    radial-gradient(1px 1px at 300px 100px, white, transparent),
+    radial-gradient(1px 1px at 550px 550px, white, transparent),
+    radial-gradient(1px 1px at 200px 60px, white, transparent),
+    radial-gradient(1.5px 1.5px at 350px 500px, white, transparent),
+    radial-gradient(1px 1px at 80px 500px, white, transparent),
+    radial-gradient(1px 1px at 480px 400px, white, transparent);
+  background-size: 600px 600px;
 }
 
-/* Мерцающие крестики - группа 1 */
+/* Мерцающие крестики - группа 1 (700x700) */
 .twinkling-1 {
   background-image: 
-    radial-gradient(1.5px 12px at 30px 130px, white, transparent),
-    radial-gradient(12px 1.5px at 30px 130px, white, transparent),
-    radial-gradient(1px 10px at 420px 80px, rgba(255,255,255,0.8), transparent),
-    radial-gradient(10px 1px at 420px 80px, rgba(255,255,255,0.8), transparent);
-  background-size: 500px 500px;
-  animation: blink 4s infinite ease-in-out;
+    radial-gradient(1.5px 12px at 130px 130px, white, transparent),
+    radial-gradient(12px 1.5px at 130px 130px, white, transparent),
+    radial-gradient(1px 10px at 420px 380px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(10px 1px at 420px 380px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1.5px 14px at 600px 150px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(14px 1.5px at 600px 150px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1px 10px at 250px 580px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(10px 1px at 250px 580px, rgba(255,255,255,0.8), transparent);
+  background-size: 700px 700px;
+  animation: blink 4.5s infinite ease-in-out;
 }
 
-/* Мерцающие крестики - группа 2 (другая частота) */
+/* Мерцающие крестики - группа 2 (800x800) */
 .twinkling-2 {
   background-image: 
-    radial-gradient(2px 15px at 250px 250px, white, transparent),
-    radial-gradient(15px 2px at 250px 250px, white, transparent),
-    radial-gradient(2.5px 18px at 500px 350px, rgba(255,255,255,0.9), transparent),
-    radial-gradient(18px 2.5px at 500px 350px, rgba(255,255,255,0.9), transparent);
-  background-size: 650px 650px;
+    radial-gradient(2px 15px at 250px 200px, white, transparent),
+    radial-gradient(15px 2px at 250px 200px, white, transparent),
+    radial-gradient(1.5px 12px at 580px 480px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(12px 1.5px at 580px 480px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1px 10px at 100px 650px, rgba(255,255,255,0.7), transparent),
+    radial-gradient(10px 1px at 100px 650px, rgba(255,255,255,0.7), transparent),
+    radial-gradient(2px 14px at 700px 100px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(14px 2px at 700px 100px, rgba(255,255,255,0.8), transparent);
+  background-size: 800px 800px;
   animation: blink 6s infinite ease-in-out;
   animation-delay: 2s;
 }
@@ -513,7 +545,7 @@ export function renderPage(info: ServiceInfo) {
     ${headerHtml}
     <hr/>
     ${getSelfServiceLinks()}
-    <h2>Service Info</h2>
+    <h2>Raw Service Info</h2>
     <pre class="raw-json">${JSON.stringify(info, null, 2)}</pre>
   </div>
 </body>
