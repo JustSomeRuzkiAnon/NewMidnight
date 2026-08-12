@@ -54,6 +54,7 @@ export const addKey: ProxyReqMutator = (manager) => {
       case "mistral-ai":
       case "mistral-text":
       case "google-ai":
+      case "openai":
         assignedKey = keyPool.get(
           body.model,
           service,
@@ -95,10 +96,6 @@ export const addKey: ProxyReqMutator = (manager) => {
           req.customProviderId
         );
         break;
-      case "openai":
-        throw new Error(
-          `Outbound API ${outboundApi} is not supported for ${inboundApi}`
-        );
       default:
         assertNever(outboundApi);
     }
