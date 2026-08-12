@@ -53,6 +53,17 @@ export interface CustomProvider {
   price: { input: number; output: number };
   /** Deepseek-style assistant prefill for deepseek-* models. */
   prefill: boolean;
+  /**
+   * Retry requests that the upstream rate-limited from inside an already-
+   * started response stream, instead of passing its error on to the client.
+   * A 429 that arrives as an HTTP status is always retried, regardless of this.
+   */
+  retry429: boolean;
+  /**
+   * Pause between those retries, in seconds. 0 paces them like the non-
+   * streaming path does, i.e. by the assigned key's own rate limit lockout.
+   */
+  retryDelay: number;
   /** Display name on the info page. */
   label: string;
   /**
@@ -92,6 +103,7 @@ const KNOWN_KEYS = [
   "prefill",
   "label",
   "check-keys",
+  "retry-429",
 ] as const;
 
 export class ProvidersFileError extends Error {}
@@ -193,6 +205,47 @@ function parseContext(file: string, entry: RawEntry): number {
   const tokens = Math.round(parseFloat(match[1]) * scale);
   if (tokens <= 0) fail(file, entry.line, "context должно быть больше нуля");
   return tokens;
+}
+
+/**
+ * What bounds the retries is the queue killing the request after five minutes
+ * (see `cleanQueue` in `proxy/queue.ts`); there is no separate attempt limit.
+ * A pause this long already leaves room for only a couple of attempts, so a
+ * larger one is almost certainly a mistake.
+ */
+const MAX_RETRY_DELAY_SECONDS = 120;
+
+/** `yes` to retry at the usual pace, or a number of seconds to pause between
+ * retries. `no` and `0` disable it. */
+function parseRetry(
+  file: string,
+  entry: RawEntry
+): { retry429: boolean; retryDelay: number } {
+  const value = entry.value.toLowerCase();
+
+  if (["no", "false", "off"].includes(value)) {
+    return { retry429: false, retryDelay: 0 };
+  }
+  if (["yes", "true", "on"].includes(value)) {
+    return { retry429: true, retryDelay: 0 };
+  }
+  if (!/^\d+$/.test(value)) {
+    fail(
+      file,
+      entry.line,
+      `retry-429 должно быть yes, no или числом секунд, получено "${entry.value}"`
+    );
+  }
+
+  const seconds = Number(value);
+  if (seconds > MAX_RETRY_DELAY_SECONDS) {
+    fail(
+      file,
+      entry.line,
+      `retry-429 не может быть больше ${MAX_RETRY_DELAY_SECONDS} секунд: запрос убивается из очереди через 5 минут, и на попытки не останется времени`
+    );
+  }
+  return { retry429: seconds > 0, retryDelay: seconds };
 }
 
 /** `0.55 / 2.19` — USD per 1M tokens, input first. */
@@ -369,6 +422,7 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
   const priceEntry = entries.get("price");
   const prefillEntry = entries.get("prefill");
   const checkKeysEntry = entries.get("check-keys");
+  const retryEntry = entries.get("retry-429");
 
   return {
     id,
@@ -378,6 +432,9 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
     contextLimit: contextEntry ? parseContext(file, contextEntry) : 200_000,
     price: priceEntry ? parsePrice(file, priceEntry) : { input: 0, output: 0 },
     prefill: prefillEntry ? parseBoolean(file, "prefill", prefillEntry) : false,
+    ...(retryEntry
+      ? parseRetry(file, retryEntry)
+      : { retry429: false, retryDelay: 0 }),
     ...(modelsEntry
       ? parseModels(file, modelsEntry)
       : { models: undefined, passthroughOthers: true }),

@@ -29,6 +29,12 @@ declare global {
       isStreaming?: boolean;
       startTime: number;
       retryCount: number;
+      /**
+       * Earliest time the queue may dispatch this request again. Set when a
+       * retry is deliberately paused; the request keeps its place in the queue
+       * meanwhile, so streaming clients keep receiving heartbeats.
+       */
+      notBefore?: number;
       queueOutTime?: number;
       onAborted?: () => void;
       proceed: () => void;

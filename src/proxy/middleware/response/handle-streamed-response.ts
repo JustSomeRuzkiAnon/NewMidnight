@@ -4,6 +4,7 @@ import { StringDecoder } from "string_decoder";
 import { promisify } from "util";
 import type { logger } from "../../../logger";
 import { BadRequestError, RetryableError } from "../../../shared/errors";
+import { getCustomProvider } from "../../../shared/custom-providers";
 import { APIFormat, keyPool } from "../../../shared/key-management";
 import {
   copySseResponseHeaders,
@@ -65,6 +66,10 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   }
 
   const prefersNativeEvents = req.inboundApi === req.outboundApi;
+  // Custom providers can opt into retrying rate limits their upstream reports
+  // from inside the stream, which the response error handler never sees because
+  // the HTTP status is 200.
+  const retryPolicy = getStreamRetryPolicy(req);
   const streamOptions = {
     contentType: headers["content-type"],
     api: req.outboundApi,
@@ -84,7 +89,10 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   // Adapter consumes the decoded text and produces server-sent events so we
   // have a standard event format for the client and to translate between API
   // message formats.
-  const adapter = new SSEStreamAdapter(streamOptions);
+  const adapter = new SSEStreamAdapter({
+    ...streamOptions,
+    retryRateLimits: retryPolicy.enabled,
+  });
   // Transformer converts server-sent events from one vendor's API message
   // format to another.
   // When a custom provider disguises a model, the upstream's events still name
@@ -133,6 +141,17 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   } catch (err) {
     if (err instanceof RetryableError) {
       keyPool.markRateLimited(req.key!);
+      // The request keeps its place in the queue while it waits, so heartbeats
+      // continue and the client's connection stays open. Without a configured
+      // pause the retry is paced by the key's own lockout, as it is for non-
+      // streaming requests.
+      if (retryPolicy.delayMs > 0) {
+        req.notBefore = Date.now() + retryPolicy.delayMs;
+        req.log.info(
+          { delayMs: retryPolicy.delayMs },
+          "Pausing before retrying rate-limited request."
+        );
+      }
       await reenqueueRequest(req);
     } else if (err instanceof BadRequestError) {
       sendErrorToClient({
@@ -174,6 +193,22 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
     }
   }
 };
+
+/**
+ * How this request should react to a rate limit reported from inside the
+ * stream, as configured by its custom provider's `retry-429`.
+ */
+function getStreamRetryPolicy(req: express.Request) {
+  const provider =
+    req.service === "custom" && req.customProviderId
+      ? getCustomProvider(req.customProviderId)
+      : undefined;
+
+  return {
+    enabled: Boolean(provider?.retry429),
+    delayMs: provider?.retry429 ? provider.retryDelay * 1000 : 0,
+  };
+}
 
 function handleAbortedStream(req: express.Request, res: express.Response) {
   return new Promise<void>((resolve) =>

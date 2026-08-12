@@ -141,7 +141,12 @@ function getQueueForPartition(partition: ModelFamily): Request[] {
 }
 
 export function dequeue(partition: ModelFamily): Request | undefined {
-  const modelQueue = getQueueForPartition(partition);
+  const now = Date.now();
+  // Requests whose retry is being paused stay in the queue but are not eligible
+  // for dispatch until the pause is over.
+  const modelQueue = getQueueForPartition(partition).filter(
+    (req) => !req.notBefore || req.notBefore <= now
+  );
 
   if (modelQueue.length === 0) {
     return undefined;

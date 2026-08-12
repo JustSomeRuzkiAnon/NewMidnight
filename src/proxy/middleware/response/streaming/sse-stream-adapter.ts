@@ -3,11 +3,17 @@ import { Transform, TransformOptions } from "stream";
 import { Message } from "@smithy/eventstream-codec";
 import { APIFormat } from "../../../../shared/key-management";
 import { BadRequestError, RetryableError } from "../../../../shared/errors";
+import { parseEvent } from "./parse-sse";
 
 type SSEStreamAdapterOptions = TransformOptions & {
   contentType?: string;
   api: APIFormat;
   logger: pino.Logger;
+  /**
+   * Treat an upstream rate limit reported inside the stream as a retryable
+   * error rather than forwarding it to the client. Enabled per custom provider.
+   */
+  retryRateLimits?: boolean;
 };
 
 /**
@@ -19,15 +25,19 @@ type SSEStreamAdapterOptions = TransformOptions & {
  */
 export class SSEStreamAdapter extends Transform {
   private readonly isAwsStream;
+  private readonly retryRateLimits: boolean;
   private api: APIFormat;
   private partialMessage = "";
   private textDecoder = new TextDecoder("utf8");
   private log: pino.Logger;
+  /** Whether any part of the completion has already reached the client. */
+  private sentCompletionData = false;
 
   constructor(options: SSEStreamAdapterOptions) {
     super({ ...options, objectMode: true });
     this.isAwsStream =
       options?.contentType === "application/vnd.amazon.eventstream";
+    this.retryRateLimits = options.retryRateLimits ?? false;
     this.api = options.api;
     this.log = options.logger.child({ module: "sse-stream-adapter" });
   }
@@ -144,7 +154,27 @@ export class SSEStreamAdapter extends Transform {
           // Mixing line endings will break some clients and our request queue
           // will have already sent \n for heartbeats, so we need to normalize
           // to \n.
-          this.push(message.replace(/\r\n?/g, "\n") + "\n\n");
+          const normalized = message.replace(/\r\n?/g, "\n");
+
+          // Some upstreams -- particularly other reverse proxies -- answer 200
+          // and only then report a rate limit inside the stream, so this is the
+          // only place we can see it. Retrying is only safe before any of the
+          // completion has reached the client; afterwards the retried response
+          // would be appended to a partial one.
+          if (
+            this.retryRateLimits &&
+            !this.sentCompletionData &&
+            isRateLimitEvent(normalized)
+          ) {
+            this.log.warn(
+              { event: normalized.slice(0, 256) },
+              "Upstream reported a rate limit inside the stream; retrying"
+            );
+            throw new RetryableError("Upstream rate limit received mid-stream");
+          }
+
+          if (getCompletionData(normalized)) this.sentCompletionData = true;
+          this.push(normalized + "\n\n");
         }
       }
       callback();
@@ -157,4 +187,69 @@ export class SSEStreamAdapter extends Transform {
   _flush(callback: (err?: Error | null) => void) {
     callback();
   }
+}
+
+/**
+ * The payload of an SSE message, or undefined for messages that carry none:
+ * comments, pings, and the stream terminator.
+ */
+function getCompletionData(message: string): string | undefined {
+  const { data } = parseEvent(message);
+  if (!data || data === "[DONE]") return undefined;
+  return data;
+}
+
+// Deliberately excludes errors a retry can't fix, such as a dead key's
+// `insufficient_quota`, which would otherwise keep the request in the queue
+// until it is killed instead of showing the user what happened.
+const RATE_LIMIT_ERROR_TYPES = [
+  "rate_limit_error",
+  "rate_limit_exceeded",
+  "overloaded_error",
+  "resource_exhausted",
+];
+const RATE_LIMIT_TEXT =
+  /rate.?limit|too many requests|has been exhausted|quota exceeded/i;
+
+/**
+ * True when a message is an upstream error about rate limiting rather than a
+ * piece of the completion, in any of the shapes we've seen:
+ *
+ * - `{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"..."}}`
+ * - `{"type":"error","error":{"type":"rate_limit_error",...}}`
+ * - a spoofed completion from a proxy built on this codebase, which always
+ *   carries the marker written by `response/error-generator.ts`
+ */
+function isRateLimitEvent(message: string): boolean {
+  const data = getCompletionData(message);
+  if (!data) return false;
+
+  // The marker only ever appears in an error this family of proxies generated,
+  // so the text around it can be matched without worrying about a real
+  // completion that happens to discuss rate limits.
+  if (data.includes("oai-proxy-error")) {
+    return /HTTP 429|too many requests|rate.?limit/i.test(data);
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return false;
+  }
+
+  const error = parsed?.error;
+  if (!error || typeof error !== "object") return false;
+
+  const code = String(error.code ?? "");
+  const status = String(error.status ?? "").toLowerCase();
+  const type = String(error.type ?? "").toLowerCase();
+
+  return (
+    code === "429" ||
+    status === "resource_exhausted" ||
+    RATE_LIMIT_ERROR_TYPES.includes(type) ||
+    RATE_LIMIT_ERROR_TYPES.includes(code.toLowerCase()) ||
+    RATE_LIMIT_TEXT.test(String(error.message ?? ""))
+  );
 }
