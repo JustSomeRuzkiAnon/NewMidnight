@@ -912,6 +912,9 @@ export async function assertConfigIsValid() {
       {
         id: provider.id,
         type: provider.type,
+        ...(provider.clientType !== provider.type
+          ? { clientType: provider.clientType }
+          : {}),
         url: provider.url,
         pathStyle: provider.pathStyle,
         proxy: proxyUrl ? proxyUrl.replace(/\/\/[^@]*@/, "//******@") : undefined,

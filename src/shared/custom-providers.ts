@@ -42,7 +42,14 @@ export type SecretSource =
 export interface CustomProvider {
   /** Section name. Also the local route (/proxy/<id>) and the model family. */
   id: string;
+  /** API format spoken by the upstream. Decides its paths and authentication. */
   type: CustomProviderType;
+  /**
+   * API format this proxy accepts from clients. Equal to `type` unless the
+   * provider declares a cross type (`google-ai to openai`), in which case both
+   * the request and the response are translated between the two formats.
+   */
+  clientType: CustomProviderType;
   /** Upstream base URL, without a trailing slash. */
   url: string;
   /** `v1` appends /v1 to the upstream path, `bare` does not. */
@@ -205,6 +212,50 @@ function parseContext(file: string, entry: RawEntry): number {
   const tokens = Math.round(parseFloat(match[1]) * scale);
   if (tokens <= 0) fail(file, entry.line, "context должно быть больше нуля");
   return tokens;
+}
+
+/**
+ * `openai`, or `<клиентский> to <апстримовый>` for a provider that speaks one
+ * format to its clients and another to its upstream.
+ */
+function parseType(
+  file: string,
+  entry: RawEntry
+): { clientType: CustomProviderType; type: CustomProviderType } {
+  const match = entry.value.toLowerCase().match(/^(\S+)(?:\s+to\s+(\S+))?$/);
+  if (!match) {
+    fail(
+      file,
+      entry.line,
+      `type должно быть форматом API или парой "клиентский to апстримовый", получено "${entry.value}"`
+    );
+  }
+
+  const clientType = match[1] as CustomProviderType;
+  const type = (match[2] ?? match[1]) as CustomProviderType;
+
+  for (const value of [clientType, type]) {
+    if (!CUSTOM_PROVIDER_TYPES.includes(value)) {
+      fail(
+        file,
+        entry.line,
+        `type "${value}" не поддерживается; доступны ${CUSTOM_PROVIDER_TYPES.join(", ")}`
+      );
+    }
+  }
+
+  // Translating a response back into Gemini's or Anthropic's shape is only
+  // implemented for an OpenAI-compatible upstream, which is what the upstreams
+  // that need this in practice are.
+  if (clientType !== type && type !== "openai") {
+    fail(
+      file,
+      entry.line,
+      `кросс-тип "${entry.value}" не поддерживается: апстрим должен быть openai, например "google-ai to openai"`
+    );
+  }
+
+  return { clientType, type };
 }
 
 /**
@@ -382,15 +433,7 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
     return entry;
   };
 
-  const typeEntry = required("type");
-  const type = typeEntry.value.toLowerCase() as CustomProviderType;
-  if (!CUSTOM_PROVIDER_TYPES.includes(type)) {
-    fail(
-      file,
-      typeEntry.line,
-      `type "${typeEntry.value}" не поддерживается; доступны ${CUSTOM_PROVIDER_TYPES.join(", ")}`
-    );
-  }
+  const { clientType, type } = parseType(file, required("type"));
 
   const toSecret = (entry: RawEntry): SecretSource => {
     if (!entry.value.startsWith("$")) return { kind: "inline", value: entry.value };
@@ -427,6 +470,7 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
   return {
     id,
     type,
+    clientType,
     url: parseUrl(file, required("url")),
     pathStyle,
     contextLimit: contextEntry ? parseContext(file, contextEntry) : 200_000,

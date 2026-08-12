@@ -6,10 +6,16 @@ import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middlewa
 import { addKey, finalizeBody, finalizeSignedRequest } from "./middleware/request";
 import { ProxyReqMutator } from "./middleware/request";
 import { ProxyResHandlerWithBody } from "./middleware/response";
-import { transformAnthropicChatResponseToOpenAI } from "./anthropic";
-import { transformGoogleAIResponse } from "./google-ai";
+import {
+  transformAnthropicChatResponseToOpenAI,
+  transformOpenAIResponseToAnthropicChat,
+} from "./anthropic";
+import {
+  transformGoogleAIResponse,
+  transformOpenAIResponseToGoogleAI,
+} from "./google-ai";
 import { assertNever } from "../shared/utils";
-import { CustomKey, keyPool } from "../shared/key-management";
+import { APIFormat, CustomKey, keyPool } from "../shared/key-management";
 import {
   CustomProvider,
   buildProviderPath,
@@ -43,6 +49,12 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
   let modelsCache: any = null;
   let modelsCacheTime = 0;
 
+  /** The upstream's API format, in the vocabulary the request pipeline uses. */
+  const upstreamApi: APIFormat =
+    provider.type === "anthropic" ? "anthropic-chat" : provider.type;
+  /** False for a cross type, where client and upstream speak different APIs. */
+  const isNativeUpstream = provider.clientType === provider.type;
+
   // All of this provider's outbound traffic goes through its proxy, if it has
   // one: the proxied completions, the model listing, and the key checker.
   const providerProxy = resolveProviderProxy(provider);
@@ -65,6 +77,12 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
         break;
       case "openai<-google-ai":
         newBody = transformGoogleAIResponse(body, req);
+        break;
+      case "anthropic-chat<-openai":
+        newBody = transformOpenAIResponseToAnthropicChat(body);
+        break;
+      case "google-ai<-openai":
+        newBody = transformOpenAIResponseToGoogleAI(body);
         break;
     }
 
@@ -255,18 +273,19 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
   }
 
   /**
-   * Rewrites the request path to match the provider's path style. For the
-   * OpenAI-compatibility endpoint of an Anthropic upstream, it also maps onto
-   * that upstream's messages endpoint.
+   * Rewrites the request path to match the provider's path style. The endpoint
+   * the client used says nothing about the upstream's, so the path comes from
+   * the format the request is being sent in.
    */
   const rewritePath: ProxyReqMutator = (manager) => {
     const req = manager.request;
     const originalPath = req.path;
     const local =
-      req.outboundApi === "anthropic-chat" &&
-      originalPath === "/v1/chat/completions"
+      req.outboundApi === "anthropic-chat"
         ? "/v1/messages"
-        : originalPath;
+        : req.outboundApi === "openai"
+          ? "/v1/chat/completions"
+          : originalPath;
     const newPath = buildProviderPath(provider, local);
 
     if (newPath !== originalPath) {
@@ -285,14 +304,17 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
   const router = Router();
   router.get("/v1/models", setProviderId, handleModelRequest);
 
-  switch (provider.type) {
+  // The endpoints exposed follow the format the provider speaks to its clients;
+  // what goes out to the upstream follows `upstreamApi`. They differ only for a
+  // provider declared with a cross type.
+  switch (provider.clientType) {
     case "openai":
       router.post(
         "/v1/chat/completions",
         ipLimiter,
         setProviderId,
         createPreprocessorMiddleware(
-          { inApi: "openai", outApi: "openai", service: "custom" },
+          { inApi: "openai", outApi: upstreamApi, service: "custom" },
           { afterTransform: [applyModelAlias, enablePrefill] }
         ),
         proxy
@@ -306,22 +328,24 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
         ipLimiter,
         setProviderId,
         createPreprocessorMiddleware(
-          { inApi: "anthropic-chat", outApi: "anthropic-chat", service: "custom" },
+          { inApi: "anthropic-chat", outApi: upstreamApi, service: "custom" },
           { afterTransform: [applyModelAlias] }
         ),
         proxy
       );
-      // OpenAI-to-Anthropic compatibility endpoint.
-      router.post(
-        "/v1/chat/completions",
-        ipLimiter,
-        setProviderId,
-        createPreprocessorMiddleware(
-          { inApi: "openai", outApi: "anthropic-chat", service: "custom" },
-          { afterTransform: [applyModelAlias] }
-        ),
-        proxy
-      );
+      if (isNativeUpstream) {
+        // OpenAI-to-Anthropic compatibility endpoint.
+        router.post(
+          "/v1/chat/completions",
+          ipLimiter,
+          setProviderId,
+          createPreprocessorMiddleware(
+            { inApi: "openai", outApi: "anthropic-chat", service: "custom" },
+            { afterTransform: [applyModelAlias] }
+          ),
+          proxy
+        );
+      }
       break;
 
     case "google-ai":
@@ -329,14 +353,16 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
       break;
 
     default:
-      assertNever(provider.type);
+      assertNever(provider.clientType);
   }
 
   return router;
 
   /**
-   * Gemini takes the model and the API key in the URL rather than the body, so
-   * it needs its own key mutator and its own target.
+   * A Gemini upstream takes the model and the API key in the URL rather than
+   * the body, so it needs its own key mutator and its own target. With a cross
+   * type the client still speaks Gemini but the upstream is an ordinary
+   * OpenAI-compatible one, which the shared proxy already handles.
    */
   function buildGoogleAIRoutes(googleRouter: Router) {
     const base = new URL(provider.url);
@@ -375,15 +401,18 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
       );
     };
 
-    const googleProxy = createQueuedProxyMiddleware({
-      mutations: [addGoogleKey, finalizeSignedRequest],
-      target: ({ signedRequest }: any) => {
-        if (!signedRequest) throw new Error("Must sign request before proxying");
-        return `${signedRequest.protocol}//${signedRequest.hostname}`;
-      },
-      blockingResponseHandler: responseHandler,
-      agent,
-    });
+    const googleProxy = isNativeUpstream
+      ? createQueuedProxyMiddleware({
+          mutations: [addGoogleKey, finalizeSignedRequest],
+          target: ({ signedRequest }: any) => {
+            if (!signedRequest)
+              throw new Error("Must sign request before proxying");
+            return `${signedRequest.protocol}//${signedRequest.hostname}`;
+          },
+          blockingResponseHandler: responseHandler,
+          agent,
+        })
+      : proxy;
 
     /** The native endpoint carries the model in the URL, not the body. */
     function readModelFromUrl(req: Request) {
@@ -431,7 +460,7 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
       ipLimiter,
       setProviderId,
       createPreprocessorMiddleware(
-        { inApi: "google-ai", outApi: "google-ai", service: "custom" },
+        { inApi: "google-ai", outApi: upstreamApi, service: "custom" },
         {
           beforeTransform: [readModelFromUrl],
           afterTransform: [applyModelAlias, setStreamFlag],
@@ -439,6 +468,8 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
       ),
       googleProxy
     );
+
+    if (!isNativeUpstream) return;
 
     googleRouter.post(
       "/v1/chat/completions",

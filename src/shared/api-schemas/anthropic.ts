@@ -10,6 +10,18 @@ import { APIFormatTransformer } from "./index";
 
 const CLAUDE_OUTPUT_MAX = config.maxOutputTokensAnthropic;
 
+/** Maps an OpenAI `finish_reason` onto Anthropic's `stop_reason`. */
+export function toAnthropicStopReason(finishReason?: string | null): string {
+  switch (finishReason) {
+    case "length":
+      return "max_tokens";
+    case "tool_calls":
+      return "tool_use";
+    default:
+      return "end_turn";
+  }
+}
+
 const AnthropicV1BaseSchema = z
   .object({
     model: z.string().max(100),

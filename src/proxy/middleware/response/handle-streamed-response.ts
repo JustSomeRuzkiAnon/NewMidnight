@@ -15,6 +15,7 @@ import type { RawResponseBodyHandler } from ".";
 import { handleBlockingResponse } from "./handle-blocking-response";
 import { buildSpoofedSSE, sendErrorToClient } from "./error-generator";
 import { getAwsEventStreamDecoder } from "./streaming/aws-event-stream-decoder";
+import { createClientEventRenderer } from "./streaming/client-event-renderer";
 import { EventAggregator } from "./streaming/event-aggregator";
 import { SSEMessageTransformer } from "./streaming/sse-message-transformer";
 import { SSEStreamAdapter } from "./streaming/sse-stream-adapter";
@@ -112,6 +113,10 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   const rewriteEventModel = (msg: any) =>
     alias && msg?.model === alias.real ? { ...msg, model: alias.public } : msg;
 
+  // Only set when the client's format differs from the upstream's; otherwise
+  // the transformed events are already what the client expects.
+  const clientRenderer = createClientEventRenderer(req);
+
   const transformer = new SSEMessageTransformer({
     inputFormat: req.outboundApi, // The format of the upstream service's events
     outputFormat: req.inboundApi, // The format the client requested
@@ -125,7 +130,12 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
     })
     .on("data", (msg) => {
       if (!prefersNativeEvents) {
-        res.write(`data: ${JSON.stringify(rewriteEventModel(msg))}\n\n`);
+        const event = rewriteEventModel(msg);
+        res.write(
+          clientRenderer
+            ? clientRenderer.render(event)
+            : `data: ${JSON.stringify(event)}\n\n`
+        );
       }
       aggregator.addEvent(msg);
     });
@@ -136,6 +146,7 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
       pipelineAsync(proxyRes, decompressor, decoder, adapter, transformer),
     ]);
     req.log.debug(`Finished proxying SSE stream.`);
+    if (clientRenderer) res.write(clientRenderer.finish());
     res.end();
     return aggregator.getFinalResponse();
   } catch (err) {

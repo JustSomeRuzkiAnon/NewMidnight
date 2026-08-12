@@ -189,6 +189,43 @@ export function transformGoogleAIResponse(
 }
 
 /**
+ * Reverse of `transformGoogleAIResponse`, for upstreams that speak OpenAI while
+ * the client speaks Gemini's own format.
+ */
+export function transformOpenAIResponseToGoogleAI(
+  openaiBody: Record<string, any>
+): Record<string, any> {
+  const choice = openaiBody.choices?.[0];
+  if (!choice) return { candidates: [] };
+
+  const parts: any[] = [];
+
+  // Reasoning arrives as `reasoning` (OpenAI o-series) or `reasoning_content`
+  // (Deepseek), depending on the upstream.
+  const reasoning = choice.message.reasoning || choice.message.reasoning_content;
+  if (reasoning) {
+    parts.push({ text: reasoning, thought: true });
+  }
+  parts.push({ text: choice.message?.content || "" });
+
+  return {
+    candidates: [
+      {
+        content: { parts, role: "model" },
+        finishReason: (choice.finish_reason || "STOP").toUpperCase(),
+        index: 0,
+        safetyRatings: [],
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: openaiBody.usage?.prompt_tokens || 0,
+      candidatesTokenCount: openaiBody.usage?.completion_tokens || 0,
+      totalTokenCount: openaiBody.usage?.total_tokens || 0,
+    },
+  };
+}
+
+/**
  * Transforms Google AI image generation response to OpenAI chat completion format
  */
 function transformGoogleAIImageResponse(

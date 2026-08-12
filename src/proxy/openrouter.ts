@@ -7,6 +7,8 @@ import { addOpenRouterKey } from "./middleware/request/mutators/add-openrouter-k
 import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 import { generateWhitelist } from "../shared/key-management/openrouter/whitelist-generator";
 import { resolveModel } from "../shared/key-management/openrouter/model-resolver";
+import { transformOpenAIResponseToAnthropicChat } from "./anthropic";
+import { transformOpenAIResponseToGoogleAI } from "./google-ai";
 import axios from "axios";
 
 let modelsCache: any = null;
@@ -58,109 +60,17 @@ const resolveOpenRouterModel = async (req: Request) => {
   req.body.model = modelData!.id;
 };
 
-// Хелпер для конвертации ответа OpenAI -> Google
-function transformOpenAIToGoogleResponse(openaiBody: any) {
-  const choice = openaiBody.choices?.[0];
-  if (!choice) return { candidates: [] };
-
-  const parts: any[] = [];
-
-  const reasoning = choice.message.reasoning || choice.message.reasoning_content;
-  
-  if (reasoning) {
-    parts.push({ text: reasoning, thought: true });
-  }
-
-  parts.push({ text: choice.message?.content || "" });
-
-  return {
-    candidates: [
-      {
-        content: {
-          parts: parts,
-          role: "model"
-        },
-        finishReason: (choice.finish_reason || "STOP").toUpperCase(),
-        index: 0,
-        safetyRatings: []
-      }
-    ],
-    usageMetadata: {
-      promptTokenCount: openaiBody.usage?.prompt_tokens || 0,
-      candidatesTokenCount: openaiBody.usage?.completion_tokens || 0,
-      totalTokenCount: openaiBody.usage?.total_tokens || 0
-    }
-  };
-}
-
-// Хелпер для конвертации ответа OpenAI -> Anthropic
-function transformOpenAIToAnthropicResponse(openaiBody: any) {
-  const choice = openaiBody.choices?.[0];
-  if (!choice) {
-    // Возвращаем пустой ответ или ошибку, если пусто
-    return {
-      id: openaiBody.id || "error",
-      type: "message",
-      role: "assistant",
-      content: [],
-      model: openaiBody.model,
-      stop_reason: "error",
-      usage: { input_tokens: 0, output_tokens: 0 }
-    };
-  }
-
-  const content: any[] = [];
-
-  // 1. Проверяем наличие "мыслей" (Reasoning)
-  // OpenRouter может возвращать это в reasoning (стандарт OpenAI o1) или reasoning_content (DeepSeek)
-  const reasoning = choice.message.reasoning || choice.message.reasoning_content;
-
-  if (reasoning) {
-    content.push({
-      type: "thinking",
-      thinking: reasoning,
-      signature: "openrouter-reasoning-signature" 
-    });
-  }
-
-  // 2. Основной текст
-  content.push({
-    type: "text",
-    text: choice.message.content || ""
-  });
-
-  // Маппинг причин остановки
-  let stopReason = "end_turn";
-  if (choice.finish_reason === "length") stopReason = "max_tokens";
-  if (choice.finish_reason === "stop") stopReason = "end_turn";
-  if (choice.finish_reason === "tool_calls") stopReason = "tool_use";
-
-  return {
-    id: openaiBody.id,
-    type: "message",
-    role: "assistant",
-    content: content,
-    model: openaiBody.model,
-    stop_reason: stopReason,
-    stop_sequence: null,
-    usage: {
-      input_tokens: openaiBody.usage?.prompt_tokens || 0,
-      output_tokens: openaiBody.usage?.completion_tokens || 0,
-      // Anthropic разделяет токены на создание и чтение кеша, но у нас этого нет
-    }
-  };
-}
-
-
 const openRouterBlockingResponseHandler: ProxyResHandlerWithBody = async (_p, req, res, body) => {
   let responseBody = body;
 
   if (req.inboundApi === "google-ai") {
-    responseBody = transformOpenAIToGoogleResponse(body);
+    responseBody = transformOpenAIResponseToGoogleAI(body as Record<string, any>);
   }
 
   if (req.inboundApi === "anthropic-chat") {
-    responseBody = transformOpenAIToAnthropicResponse(body);
+    responseBody = transformOpenAIResponseToAnthropicChat(
+      body as Record<string, any>
+    );
   }
 
   res.status(200).json(responseBody);

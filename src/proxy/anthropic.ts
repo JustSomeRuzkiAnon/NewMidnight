@@ -9,6 +9,7 @@ import {
 import { ProxyResHandlerWithBody } from "./middleware/response";
 import { createQueuedProxyMiddleware } from "./middleware/request/proxy-middleware-factory";
 import { ProxyReqManager } from "./middleware/request/proxy-req-manager";
+import { toAnthropicStopReason } from "../shared/api-schemas/anthropic";
 import { claudeModels } from "../shared/claude-models";
 import { validateClaude41OpusParameters } from "../shared/claude-4-1-validation";
 
@@ -154,6 +155,56 @@ export function transformAnthropicChatResponseToOpenAI(
         index: 0,
       },
     ],
+  };
+}
+
+/**
+ * Reverse of `transformAnthropicChatResponseToOpenAI`, for upstreams that speak
+ * OpenAI while the client speaks the Anthropic Messages API.
+ */
+export function transformOpenAIResponseToAnthropicChat(
+  openaiBody: Record<string, any>
+): Record<string, any> {
+  const choice = openaiBody.choices?.[0];
+  if (!choice) {
+    return {
+      id: openaiBody.id || "error",
+      type: "message",
+      role: "assistant",
+      content: [],
+      model: openaiBody.model,
+      stop_reason: "error",
+      usage: { input_tokens: 0, output_tokens: 0 },
+    };
+  }
+
+  const content: any[] = [];
+
+  // Reasoning arrives as `reasoning` (OpenAI o-series) or `reasoning_content`
+  // (Deepseek), depending on the upstream.
+  const reasoning = choice.message.reasoning || choice.message.reasoning_content;
+  if (reasoning) {
+    content.push({
+      type: "thinking",
+      thinking: reasoning,
+      signature: "upstream-reasoning-signature",
+    });
+  }
+
+  content.push({ type: "text", text: choice.message.content || "" });
+
+  return {
+    id: openaiBody.id,
+    type: "message",
+    role: "assistant",
+    content,
+    model: openaiBody.model,
+    stop_reason: toAnthropicStopReason(choice.finish_reason),
+    stop_sequence: null,
+    usage: {
+      input_tokens: openaiBody.usage?.prompt_tokens || 0,
+      output_tokens: openaiBody.usage?.completion_tokens || 0,
+    },
   };
 }
 
