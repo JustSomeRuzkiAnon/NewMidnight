@@ -13,6 +13,7 @@ import {
   incrementTokenCount,
 } from "../../../shared/users/user-store";
 import { assertNever } from "../../../shared/utils";
+import { getCustomProvider } from "../../../shared/custom-providers";
 import { reenqueueRequest, trackWaitTime } from "../../queue";
 import { refundLastAttempt } from "../../rate-limit";
 import {
@@ -182,21 +183,34 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
   // Parse the error response body
   let errorPayload: ProxiedErrorPayload;
   try {
-    assertJsonResponse(body);
-    errorPayload = body;
+    errorPayload = parseErrorBody(body);
   } catch (parseError) {
     const strBody = String(body).slice(0, 128);
     req.log.error({ statusCode, strBody }, "Error body is not JSON");
 
-    const details = {
-      error: parseError.message,
-      status: statusCode,
-      statusMessage,
-      proxy_note: `Proxy got back an error, but it was not in JSON format. This is likely a temporary problem with the upstream service. Response body: ${strBody}`,
-    };
+    // Some upstreams (particularly rate-limiting reverse proxies) answer with
+    // an empty or plaintext body. Those still need the same key rotation and
+    // retry handling as a well-formed error, so synthesize a payload from the
+    // status line and continue instead of giving up here.
+    if (isRetryableStatus(statusCode)) {
+      errorPayload = {
+        error: {
+          message: strBody || statusMessage,
+          type: "upstream_error",
+          code: statusCode,
+        },
+      };
+    } else {
+      const details = {
+        error: parseError.message,
+        status: statusCode,
+        statusMessage,
+        proxy_note: `Proxy got back an error, but it was not in JSON format. This is likely a temporary problem with the upstream service. Response body: ${strBody}`,
+      };
 
-    sendProxyError(req, res, statusCode, statusMessage, details);
-    throw new HttpError(statusCode, parseError.message);
+      sendProxyError(req, res, statusCode, statusMessage, details);
+      throw new HttpError(statusCode, parseError.message);
+    }
   }
 
   // Extract the error type from the response body depending on the service
@@ -438,6 +452,7 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         case "atf":
         case "custom":
           keyPool.markRateLimited(req.key!);
+          applyCustomRetryDelay(req);
           await reenqueueRequest(req);
           throw new RetryableError("Rate-limited request re-enqueued.");
       default:
@@ -1032,6 +1047,18 @@ async function handleGoogleAIRateLimitError(
       throw new RetryableError("Rate-limited request re-enqueued.");
     }
     default:
+      if (!status) {
+        // No structured status (e.g. an empty or plaintext 429 body from a
+        // custom endpoint); treat it as an ordinary rate limit.
+        req.log.debug(
+          { key: req.key.hash, error: text },
+          "Google AI request rate limited without a status, will retry."
+        );
+        keyPool.markRateLimited(req.key);
+        applyCustomRetryDelay(req);
+        await reenqueueRequest(req);
+        throw new RetryableError("Rate-limited request re-enqueued.");
+      }
       errorPayload.proxy_note = `Unrecognized rate limit error from Google AI (${status}). Please report this.`;
       break;
   }
@@ -1467,7 +1494,54 @@ function checkForCacheControl(body: any): boolean {
 }
 
 function assertJsonResponse(body: any): asserts body is Record<string, any> {
-  if (typeof body !== "object") {
+  if (typeof body !== "object" || body === null) {
     throw new Error(`Expected response to be an object, got ${typeof body}`);
   }
+}
+
+/**
+ * Coerces an upstream error body into an object. Bodies served without a JSON
+ * content-type arrive here as strings even when their contents are valid JSON,
+ * so try to parse those before giving up.
+ * @throws {Error} If the body cannot be interpreted as a JSON object
+ */
+function parseErrorBody(body: any): ProxiedErrorPayload {
+  if (typeof body === "string") {
+    const trimmed = body.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      const parsed = JSON.parse(trimmed);
+      assertJsonResponse(parsed);
+      return parsed;
+    }
+  }
+  assertJsonResponse(body);
+  return body;
+}
+
+/**
+ * Paces the retry of a rate-limited custom provider request according to that
+ * provider's `retry-429` setting, mirroring what the streaming handler does for
+ * rate limits reported from inside a stream. Without a configured pause the
+ * retry is paced by the key's own lockout.
+ */
+function applyCustomRetryDelay(req: Request) {
+  if (req.service !== "custom" || !req.customProviderId) return;
+
+  const provider = getCustomProvider(req.customProviderId);
+  const delayMs = provider?.retry429 ? provider.retryDelay * 1000 : 0;
+  if (delayMs > 0) {
+    req.notBefore = Date.now() + delayMs;
+    req.log.info(
+      { delayMs },
+      "Pausing before retrying rate-limited request."
+    );
+  }
+}
+
+/**
+ * Statuses where an unparseable body shouldn't stop us from rotating keys and
+ * retrying, because the failure is about capacity rather than the prompt.
+ */
+function isRetryableStatus(statusCode: number): boolean {
+  return statusCode === 429 || statusCode >= 500;
 }
