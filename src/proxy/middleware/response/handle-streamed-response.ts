@@ -67,9 +67,9 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   }
 
   const prefersNativeEvents = req.inboundApi === req.outboundApi;
-  // Custom providers can opt into retrying rate limits their upstream reports
-  // from inside the stream, which the response error handler never sees because
-  // the HTTP status is 200.
+  // Custom providers can opt into retrying rate limits and unavailable-provider
+  // errors their upstream reports from inside the stream, which the response
+  // error handler never sees because the HTTP status is 200.
   const retryPolicy = getStreamRetryPolicy(req);
   const streamOptions = {
     contentType: headers["content-type"],
@@ -92,7 +92,7 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
   // message formats.
   const adapter = new SSEStreamAdapter({
     ...streamOptions,
-    retryRateLimits: retryPolicy.enabled,
+    retryTransientErrors: retryPolicy.enabled,
   });
   // Transformer converts server-sent events from one vendor's API message
   // format to another.
@@ -206,8 +206,9 @@ export const handleStreamedResponse: RawResponseBodyHandler = async (
 };
 
 /**
- * How this request should react to a rate limit reported from inside the
- * stream, as configured by its custom provider's `retry-429`.
+ * How this request should react to a rate limit or an unavailable-provider
+ * error reported from inside the stream, as configured by its custom provider's
+ * `retry-429`.
  */
 function getStreamRetryPolicy(req: express.Request) {
   const provider =

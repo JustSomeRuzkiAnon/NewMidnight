@@ -10,10 +10,11 @@ type SSEStreamAdapterOptions = TransformOptions & {
   api: APIFormat;
   logger: pino.Logger;
   /**
-   * Treat an upstream rate limit reported inside the stream as a retryable
-   * error rather than forwarding it to the client. Enabled per custom provider.
+   * Treat a rate limit or an unavailable-provider error reported inside the
+   * stream as a retryable error rather than forwarding it to the client.
+   * Enabled per custom provider.
    */
-  retryRateLimits?: boolean;
+  retryTransientErrors?: boolean;
 };
 
 /**
@@ -25,7 +26,7 @@ type SSEStreamAdapterOptions = TransformOptions & {
  */
 export class SSEStreamAdapter extends Transform {
   private readonly isAwsStream;
-  private readonly retryRateLimits: boolean;
+  private readonly retryTransientErrors: boolean;
   private api: APIFormat;
   private partialMessage = "";
   private textDecoder = new TextDecoder("utf8");
@@ -37,7 +38,7 @@ export class SSEStreamAdapter extends Transform {
     super({ ...options, objectMode: true });
     this.isAwsStream =
       options?.contentType === "application/vnd.amazon.eventstream";
-    this.retryRateLimits = options.retryRateLimits ?? false;
+    this.retryTransientErrors = options.retryTransientErrors ?? false;
     this.api = options.api;
     this.log = options.logger.child({ module: "sse-stream-adapter" });
   }
@@ -157,20 +158,29 @@ export class SSEStreamAdapter extends Transform {
           const normalized = message.replace(/\r\n?/g, "\n");
 
           // Some upstreams -- particularly other reverse proxies -- answer 200
-          // and only then report a rate limit inside the stream, so this is the
-          // only place we can see it. Retrying is only safe before any of the
-          // completion has reached the client; afterwards the retried response
-          // would be appended to a partial one.
-          if (
-            this.retryRateLimits &&
-            !this.sentCompletionData &&
-            isRateLimitEvent(normalized)
-          ) {
-            this.log.warn(
-              { event: normalized.slice(0, 256) },
-              "Upstream reported a rate limit inside the stream; retrying"
-            );
-            throw new RetryableError("Upstream rate limit received mid-stream");
+          // and only then report a rate limit or an unavailable provider inside
+          // the stream, so this is the only place we can see it. Retrying is
+          // only safe before any of the completion has reached the client;
+          // afterwards the retried response would be appended to a partial one.
+          if (this.retryTransientErrors && !this.sentCompletionData) {
+            if (isRateLimitEvent(normalized)) {
+              this.log.warn(
+                { event: normalized.slice(0, 256) },
+                "Upstream reported a rate limit inside the stream; retrying"
+              );
+              throw new RetryableError(
+                "Upstream rate limit received mid-stream"
+              );
+            }
+            if (isUnavailableEvent(normalized)) {
+              this.log.warn(
+                { event: normalized.slice(0, 256) },
+                "Upstream reported it is unavailable inside the stream; retrying"
+              );
+              throw new RetryableError(
+                "Upstream unavailable error received mid-stream"
+              );
+            }
           }
 
           if (getCompletionData(normalized)) this.sentCompletionData = true;
@@ -251,5 +261,59 @@ function isRateLimitEvent(message: string): boolean {
     RATE_LIMIT_ERROR_TYPES.includes(type) ||
     RATE_LIMIT_ERROR_TYPES.includes(code.toLowerCase()) ||
     RATE_LIMIT_TEXT.test(String(error.message ?? ""))
+  );
+}
+
+// As with rate limits, only errors that a different key or a later attempt can
+// clear; a permanently missing model or a rejected prompt must reach the user.
+const UNAVAILABLE_ERROR_TYPES = [
+  "provider_unavailable",
+  "service_unavailable",
+  "server_error",
+  "api_error",
+  "unavailable",
+];
+const UNAVAILABLE_TEXT =
+  /temporarily unavailable|service unavailable|no (?:healthy )?(?:provider|upstream)s? available|upstream (?:is )?unavailable/i;
+
+/**
+ * True when a message is an upstream error about the provider being out of
+ * capacity rather than a piece of the completion, e.g. the shape upstream
+ * proxies send alongside a 503:
+ *
+ * - `{"error":{"message":"provider temporarily unavailable. Error id: ...","type":"provider_unavailable"}}`
+ * - `{"error":{"code":503,"status":"UNAVAILABLE","message":"..."}}`
+ */
+function isUnavailableEvent(message: string): boolean {
+  const data = getCompletionData(message);
+  if (!data) return false;
+
+  if (data.includes("oai-proxy-error")) {
+    return /HTTP 50[0234]|service unavailable|temporarily unavailable/i.test(
+      data
+    );
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    return false;
+  }
+
+  const error = parsed?.error;
+  if (!error || typeof error !== "object") return false;
+
+  const code = String(error.code ?? "");
+  const status = String(error.status ?? "").toLowerCase();
+  const type = String(error.type ?? "").toLowerCase();
+
+  return (
+    code === "503" ||
+    status === "unavailable" ||
+    status === "service_unavailable" ||
+    UNAVAILABLE_ERROR_TYPES.includes(type) ||
+    UNAVAILABLE_ERROR_TYPES.includes(code.toLowerCase()) ||
+    UNAVAILABLE_TEXT.test(String(error.message ?? ""))
   );
 }

@@ -61,9 +61,10 @@ export interface CustomProvider {
   /** Deepseek-style assistant prefill for deepseek-* models. */
   prefill: boolean;
   /**
-   * Retry requests that the upstream rate-limited from inside an already-
-   * started response stream, instead of passing its error on to the client.
-   * A 429 that arrives as an HTTP status is always retried, regardless of this.
+   * Retry requests that the upstream rate-limited or refused for lack of
+   * capacity from inside an already-started response stream, instead of passing
+   * its error on to the client. A 429 or 503 that arrives as an HTTP status is
+   * always retried, regardless of this.
    */
   retry429: boolean;
   /**

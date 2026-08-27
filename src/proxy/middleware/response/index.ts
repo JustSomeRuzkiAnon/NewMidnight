@@ -522,6 +522,21 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "openrouter":
         await reenqueueRequest(req);
         throw new RetryableError("OpenRouter is temporarily unavailable, retrying...");
+      case "atf":
+      case "custom":
+        // Upstream proxies answer 503 when the provider they're fronting is
+        // momentarily out of capacity, which another key or a later attempt
+        // usually clears, so it's paced and retried like a rate limit.
+        req.log.warn(
+          { key: req.key?.hash, errorType, errorPayload },
+          "Custom provider upstream is unavailable (503). Re-enqueueing request."
+        );
+        keyPool.markRateLimited(req.key!);
+        applyCustomRetryDelay(req);
+        await reenqueueRequest(req);
+        throw new RetryableError(
+          "Upstream reported it is unavailable (503), re-enqueued request."
+        );
       default:
         errorPayload.proxy_note = `Upstream service unavailable. Try again later.`;
         break;
@@ -1519,10 +1534,11 @@ function parseErrorBody(body: any): ProxiedErrorPayload {
 }
 
 /**
- * Paces the retry of a rate-limited custom provider request according to that
- * provider's `retry-429` setting, mirroring what the streaming handler does for
- * rate limits reported from inside a stream. Without a configured pause the
- * retry is paced by the key's own lockout.
+ * Paces the retry of a custom provider request the upstream rate-limited or
+ * refused for lack of capacity, according to that provider's `retry-429`
+ * setting, mirroring what the streaming handler does for the same errors
+ * reported from inside a stream. Without a configured pause the retry is paced
+ * by the key's own lockout.
  */
 function applyCustomRetryDelay(req: Request) {
   if (req.service !== "custom" || !req.customProviderId) return;
@@ -1531,10 +1547,7 @@ function applyCustomRetryDelay(req: Request) {
   const delayMs = provider?.retry429 ? provider.retryDelay * 1000 : 0;
   if (delayMs > 0) {
     req.notBefore = Date.now() + delayMs;
-    req.log.info(
-      { delayMs },
-      "Pausing before retrying rate-limited request."
-    );
+    req.log.info({ delayMs }, "Pausing before retrying failed request.");
   }
 }
 
