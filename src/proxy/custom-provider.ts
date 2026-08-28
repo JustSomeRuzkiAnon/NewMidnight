@@ -217,10 +217,30 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
     }
   };
 
-  /** Tags the request so key selection and stats can find the provider. */
-  const setProviderId: RequestHandler = (req, _res, next) => {
+  /**
+   * Tags the request so key selection and stats can find the provider, and
+   * arranges for its concurrency slot to be freed once the client's connection
+   * is over, however it ended.
+   */
+  const setProviderId: RequestHandler = (req, res, next) => {
     req.customProviderId = provider.id;
+    if (provider.concurrency > 0) {
+      res.once("close", () =>
+        keyPool.releaseCustomKey(provider.id, String(req.id))
+      );
+    }
     next();
+  };
+
+  /**
+   * Takes one of the assigned key's concurrency slots for as long as the
+   * request is using it. Runs after the key mutator on every attempt, so a
+   * retry moves its slot to whichever key it was just given.
+   */
+  const holdKey: ProxyReqMutator = (manager) => {
+    const req = manager.request;
+    if (provider.concurrency <= 0 || !req.key) return;
+    keyPool.holdCustomKey(provider.id, req.key.hash, String(req.id));
   };
 
   /**
@@ -295,7 +315,7 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
   };
 
   const proxy = createQueuedProxyMiddleware({
-    mutations: [addKey, rewritePath, finalizeBody],
+    mutations: [addKey, holdKey, rewritePath, finalizeBody],
     target: () => provider.url,
     blockingResponseHandler: responseHandler,
     agent,
@@ -403,7 +423,7 @@ export function createCustomProviderRouter(provider: CustomProvider): Router {
 
     const googleProxy = isNativeUpstream
       ? createQueuedProxyMiddleware({
-          mutations: [addGoogleKey, finalizeSignedRequest],
+          mutations: [addGoogleKey, holdKey, finalizeSignedRequest],
           target: ({ signedRequest }: any) => {
             if (!signedRequest)
               throw new Error("Must sign request before proxying");

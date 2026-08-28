@@ -72,6 +72,17 @@ export interface CustomProvider {
    * streaming path does, i.e. by the assigned key's own rate limit lockout.
    */
   retryDelay: number;
+  /**
+   * How many upstream requests a single key may make per minute. The minute
+   * starts with that key's first request and requests beyond the cap wait in
+   * the queue until it rolls over. 0 means no cap.
+   */
+  rateLimit: number;
+  /**
+   * How many requests a single key may have in flight at once. Further requests
+   * wait in the queue until one of them finishes. 0 means no cap.
+   */
+  concurrency: number;
   /** Display name on the info page. */
   label: string;
   /**
@@ -112,6 +123,8 @@ const KNOWN_KEYS = [
   "label",
   "check-keys",
   "retry-429",
+  "rate-limit",
+  "concurrency",
 ] as const;
 
 export class ProvidersFileError extends Error {}
@@ -300,6 +313,24 @@ function parseRetry(
   return { retry429: seconds > 0, retryDelay: seconds };
 }
 
+/**
+ * A per-key cap given as a plain count, with `no` and `0` meaning "no cap".
+ * Used by both `rate-limit` and `concurrency`.
+ */
+function parseKeyLimit(file: string, key: string, entry: RawEntry, unit: string): number {
+  const value = entry.value.toLowerCase();
+
+  if (["no", "false", "off"].includes(value)) return 0;
+  if (!/^\d+$/.test(value)) {
+    fail(
+      file,
+      entry.line,
+      `${key} должно быть ${unit} или no, получено "${entry.value}"`
+    );
+  }
+  return Number(value);
+}
+
 /** `0.55 / 2.19` — USD per 1M tokens, input first. */
 function parsePrice(file: string, entry: RawEntry): { input: number; output: number } {
   const parts = entry.value.split("/").map((p) => p.trim());
@@ -467,6 +498,8 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
   const prefillEntry = entries.get("prefill");
   const checkKeysEntry = entries.get("check-keys");
   const retryEntry = entries.get("retry-429");
+  const rateLimitEntry = entries.get("rate-limit");
+  const concurrencyEntry = entries.get("concurrency");
 
   return {
     id,
@@ -480,6 +513,17 @@ function buildProvider(section: RawSection, file: string): CustomProvider {
     ...(retryEntry
       ? parseRetry(file, retryEntry)
       : { retry429: false, retryDelay: 0 }),
+    rateLimit: rateLimitEntry
+      ? parseKeyLimit(file, "rate-limit", rateLimitEntry, "числом запросов в минуту")
+      : 0,
+    concurrency: concurrencyEntry
+      ? parseKeyLimit(
+          file,
+          "concurrency",
+          concurrencyEntry,
+          "числом одновременных запросов"
+        )
+      : 0,
     ...(modelsEntry
       ? parseModels(file, modelsEntry)
       : { models: undefined, passthroughOthers: true }),

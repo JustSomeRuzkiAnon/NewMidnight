@@ -176,6 +176,26 @@ export class KeyPool {
     return this.getKeyProvider(service, family).getLockoutPeriod(family);
   }
 
+  /**
+   * Records that a request is now using a custom provider's key, so the
+   * provider's `concurrency` cap can account for it. Calling this again for the
+   * same request replaces the previous key, which is what a retry does.
+   */
+  public holdCustomKey(providerId: string, keyHash: string, requestId: string): void {
+    const provider = this.getKeyProvider("custom", providerId);
+    if (provider instanceof CustomKeyProvider) {
+      provider.acquire(keyHash, requestId);
+    }
+  }
+
+  /** Releases whichever key of the provider the request was holding. */
+  public releaseCustomKey(providerId: string, requestId: string): void {
+    const provider = this.getKeyProvider("custom", providerId);
+    if (provider instanceof CustomKeyProvider) {
+      provider.release(requestId);
+    }
+  }
+
   public markRateLimited(key: Key): void {
     const provider = this.getKeyProvider(key.service, this.providerIdOf(key));
     provider.markRateLimited(key.hash);
