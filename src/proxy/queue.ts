@@ -132,6 +132,15 @@ export async function reenqueueRequest(req: Request) {
     { key: req.key?.hash, retryCount: req.retryCount },
     `Re-enqueueing request due to retryable error`
   );
+  // A request waiting in the queue is not using its key, so it must not keep
+  // the concurrency slot it took for the attempt that just failed. Holding it
+  // would deadlock the partition: with the slot taken, getLockoutPeriod never
+  // returns 0 and the request is never dequeued to release it, so it just sits
+  // there until the five minute reaper kills it. The slot is taken again by
+  // the holdKey mutator when the request is dispatched.
+  if (req.customProviderId) {
+    keyPool.releaseCustomKey(req.customProviderId, String(req.id));
+  }
   req.retryCount++;
   await enqueue(req);
 }
