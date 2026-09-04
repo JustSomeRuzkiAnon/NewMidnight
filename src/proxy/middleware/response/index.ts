@@ -5,6 +5,10 @@ import * as http from "http";
 import { config } from "../../../config";
 import { HttpError, RetryableError } from "../../../shared/errors";
 import { keyPool, GoogleAIKey } from "../../../shared/key-management";
+import {
+  isUsageLimitError,
+  parseQuotaResetTime,
+} from "../../../shared/key-management/glm-zai-coding/quota";
 import { logger } from "../../../logger";
 import { getOpenAIModelFamily, GoogleAIModelFamily } from "../../../shared/models";
 import { countTokens } from "../../../shared/tokenization";
@@ -437,6 +441,9 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
       case "glm-zai":
         await handleGlmRateLimitError(req, errorPayload);
         break;
+      case "glm-zai-coding":
+        await handleGlmZaiCodingRateLimitError(req, errorPayload);
+        break;
         case "xai":
           await handleXaiRateLimitError(req, errorPayload);
           break;
@@ -717,6 +724,37 @@ async function handleGlmRateLimitError(
     await reenqueueRequest(req);
     throw new RetryableError("GLM rate-limited request re-enqueued.");
   }
+}
+
+/**
+ * The Z.ai coding plan answers 429 either for an ordinary rate limit or because
+ * the plan's rolling usage window is spent, in which case the message says when
+ * it rolls over. The key is parked until that moment and returns on its own, so
+ * the request is retried on another key meanwhile.
+ */
+async function handleGlmZaiCodingRateLimitError(
+  req: Request,
+  errorPayload: ProxiedErrorPayload
+) {
+  const error = errorPayload.error || {};
+  const message = String(error.message || errorPayload.message || "");
+
+  if (isUsageLimitError(message, error.code)) {
+    const resetsAt = parseQuotaResetTime(message);
+    req.log.warn(
+      { key: req.key?.hash, message, resumesAt: new Date(resetsAt).toISOString() },
+      "GLM Zai coding key has spent its usage quota; parking it until it resets"
+    );
+    keyPool.markOverQuotaUntil(req.key!, resetsAt);
+    await reenqueueRequest(req);
+    throw new RetryableError(
+      "GLM Zai coding key is out of quota, retrying with different key."
+    );
+  }
+
+  keyPool.markRateLimited(req.key!);
+  await reenqueueRequest(req);
+  throw new RetryableError("GLM Zai coding rate-limited request re-enqueued.");
 }
 
 async function handleXaiRateLimitError(

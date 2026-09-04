@@ -124,6 +124,20 @@ export class KeyPool {
   }
 
   /**
+   * Marks a key as being out of quota until the given moment, for upstreams
+   * that say when their quota window rolls over. Providers that can't park a
+   * key that way just have it disabled, as they did before.
+   */
+  public markOverQuotaUntil(key: Key, resetsAt: number): void {
+    const provider = this.getKeyProvider(key.service, this.providerIdOf(key));
+    if (provider instanceof GlmZaiCodingKeyProvider) {
+      provider.markOverQuota(key.hash, resetsAt);
+      return;
+    }
+    this.disable(key, "quota");
+  }
+
+  /**
    * Updates a key in the keypool with the given properties.
    *
    * Be aware that the `key` argument may not be the same object instance as the

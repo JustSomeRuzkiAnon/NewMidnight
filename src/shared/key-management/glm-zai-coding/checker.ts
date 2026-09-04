@@ -1,6 +1,11 @@
 import { GlmZaiCodingKey } from "./provider";
+import { parseQuotaResetTime } from "./quota";
 import { logger } from "../../../logger";
 import { assertNever } from "../../utils";
+
+type CheckResult = "valid" | "invalid" | "quota" | "server_error";
+/** A quota result carries when the plan's usage window is due to roll over. */
+type CheckOutcome = { result: CheckResult; quotaResetsAt?: number };
 
 const CHECK_TIMEOUT = 10000;
 const SERVER_ERROR_RETRY_DELAY = 5000;
@@ -18,7 +23,8 @@ export class GlmZaiCodingKeyChecker {
 
   public async checkKey(key: GlmZaiCodingKey): Promise<void> {
     try {
-      const result = await this.validateKey(key);
+      const outcome = await this.validateKey(key);
+      const { result } = outcome;
 
       if (connectionErrorCounts[key.hash]) {
         delete connectionErrorCounts[key.hash];
@@ -51,7 +57,7 @@ export class GlmZaiCodingKeyChecker {
           );
 
           delete serverErrorCounts[key.hash];
-          this.handleCheckResult(key, "invalid");
+          this.handleCheckResult(key, { result: "invalid" });
           return;
         }
       } else {
@@ -59,7 +65,7 @@ export class GlmZaiCodingKeyChecker {
           delete serverErrorCounts[key.hash];
         }
 
-        this.handleCheckResult(key, result);
+        this.handleCheckResult(key, outcome);
       }
     } catch (error) {
       const currentCount = (connectionErrorCounts[key.hash] || 0) + 1;
@@ -96,7 +102,7 @@ export class GlmZaiCodingKeyChecker {
     }
   }
 
-  private async validateKey(key: GlmZaiCodingKey): Promise<"valid" | "invalid" | "quota" | "server_error"> {
+  private async validateKey(key: GlmZaiCodingKey): Promise<CheckOutcome> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
 
@@ -126,31 +132,43 @@ export class GlmZaiCodingKeyChecker {
             { key: key.hash, rateLimit },
             "Key check successful, updating rate limit info"
           );
-          return "valid";
+          return { result: "valid" };
         case 400:
           this.log.warn({ hash: key.hash }, "Key validation failed (bad request)");
-          return "invalid";
+          return { result: "invalid" };
         case 401:
           this.log.warn({ hash: key.hash }, "Key is invalid (authentication failed)");
-          return "invalid";
+          return { result: "invalid" };
         case 402:
           this.log.warn({ hash: key.hash }, "Key has insufficient balance");
-          return "quota";
-        case 429:
-          this.log.warn({ key: key.hash }, "Key is rate limited or invalid");
-          return "quota";
+          return { result: "quota" };
+        case 429: {
+          // The plan's usage window says when it rolls over, so the key can be
+          // parked until then instead of being written off.
+          const message = await response.text().catch(() => "");
+          const quotaResetsAt = parseQuotaResetTime(message);
+          this.log.warn(
+            {
+              key: key.hash,
+              message: message.slice(0, 256),
+              resumesAt: new Date(quotaResetsAt).toISOString(),
+            },
+            "Key is out of quota; it will be rechecked once the quota resets"
+          );
+          return { result: "quota", quotaResetsAt };
+        }
         case 500:
           this.log.warn({ hash: key.hash }, "Server error when checking key");
-          return "server_error";
+          return { result: "server_error" };
         case 503:
           this.log.warn({ hash: key.hash }, "Server overloaded when checking key");
-          return "server_error";
+          return { result: "server_error" };
         default:
           this.log.warn(
             { status: response.status, hash: key.hash },
             "Unexpected status code while checking key"
           );
-          return "invalid";
+          return { result: "invalid" };
       }
     } finally {
       clearTimeout(timeout);
@@ -159,12 +177,14 @@ export class GlmZaiCodingKeyChecker {
 
   private handleCheckResult(
     key: GlmZaiCodingKey,
-    result: "valid" | "invalid" | "quota" | "server_error"
+    { result, quotaResetsAt }: CheckOutcome
   ): void {
     switch (result) {
       case "valid":
         this.update(key.hash, {
           isDisabled: false,
+          isOverQuota: false,
+          quotaResetsAt: 0,
           lastChecked: Date.now(),
         });
         break;
@@ -177,10 +197,19 @@ export class GlmZaiCodingKeyChecker {
         });
         break;
       case "quota":
-        this.log.warn({ hash: key.hash }, "Key has exceeded its quota");
+        // Without a reset time (an exhausted balance rather than the plan's
+        // usage window) the key stays parked until an operator rechecks it.
+        this.log.warn(
+          {
+            hash: key.hash,
+            resumesAt: quotaResetsAt ? new Date(quotaResetsAt).toISOString() : undefined,
+          },
+          "Key has exceeded its quota"
+        );
         this.update(key.hash, {
           isDisabled: true,
           isOverQuota: true,
+          quotaResetsAt: quotaResetsAt ?? 0,
           lastChecked: Date.now(),
         });
         break;
