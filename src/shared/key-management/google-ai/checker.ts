@@ -11,10 +11,10 @@ const KEY_CHECK_PERIOD = 6 * 60 * 60 * 1000; // 3 hours
 const LIST_MODELS_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
 const GENERATE_CONTENT_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%KEY%";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%KEY%";
 const PRO_MODEL_ID = "gemini-2.5-pro";
 const FLASH_PREVIEW_ID = "gemini-3-flash-preview";
-const PRO_PREVIEW_ID = "gemini-3-pro-preview";
+const PRO_PREVIEW_ID = "gemini-3.1-pro-preview";
 const GENERATE_PRO_CONTENT_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/${PRO_MODEL_ID}:generateContent?key=%KEY%`;
 const GENERATE_FLASH_PREVIEW_URL =
