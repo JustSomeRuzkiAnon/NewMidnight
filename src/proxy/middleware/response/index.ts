@@ -513,6 +513,19 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
     }
   } else if (statusCode === 503) {
     switch (service) {
+      case "google-ai":
+        // Google answers 503 when the model is momentarily overloaded, which
+        // another key or a later attempt usually clears, so it's paced and
+        // retried like a rate limit.
+        req.log.warn(
+          { key: req.key?.hash, errorType, errorPayload },
+          "Google AI is unavailable (503). Re-enqueueing request."
+        );
+        keyPool.markRateLimited(req.key!);
+        await reenqueueRequest(req);
+        throw new RetryableError(
+          "Google AI reported it is unavailable (503), re-enqueued request."
+        );
       case "aws":
         // Re-enqueue on any 503 from AWS Bedrock
         req.log.warn(
