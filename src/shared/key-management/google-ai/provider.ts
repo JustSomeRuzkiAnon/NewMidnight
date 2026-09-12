@@ -35,6 +35,8 @@ export interface GoogleAIKey extends Key {
   isOverQuota?: boolean;
   /** Model families that are over quota and need to be excluded. */
   overQuotaFamilies?: GoogleAIModelFamily[];
+  /** When overQuotaFamilies was last added to, to tell if its quota reset. */
+  overQuotaFamiliesAt?: number;
   /** Whether this key has billing enabled (required for preview models). */
   billingEnabled?: boolean;
 }
@@ -133,6 +135,7 @@ export class GoogleAIKeyProvider implements KeyProvider<GoogleAIKey> {
         tokenUsage: {}, // Initialize new tokenUsage field
         modelIds: [],
         overQuotaFamilies: [],
+        overQuotaFamiliesAt: 0,
         billingEnabled: false, // Will be determined during key checking
       };
       this.keys.push(newKey);

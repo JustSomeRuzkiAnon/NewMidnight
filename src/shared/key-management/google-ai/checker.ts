@@ -23,6 +23,13 @@ const GENERATE_PRO_PREVIEW_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/${PRO_PREVIEW_ID}:generateContent?key=%KEY%`;
 const IMAGEN_BILLING_TEST_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict";
+/**
+ * Free-tier quotas are accounted in Google's billing timezone, so a daily one
+ * that is exhausted comes back at the next midnight there and not before.
+ */
+const QUOTA_RESET_TIMEZONE = "America/Los_Angeles";
+/** Shortest recheck to schedule, so a tight quota cannot become a hot loop. */
+const MIN_RECHECK_DELAY = 60 * 1000;
 
 type ListModelsResponse = {
   models: {
@@ -41,6 +48,64 @@ type ListModelsResponse = {
   }[];
   nextPageToken: string;
 };
+
+/** A single entry of a `google.rpc.QuotaFailure` detail. */
+type QuotaViolation = {
+  quotaId?: string;
+  quotaMetric?: string;
+  quotaValue?: string;
+  quotaDimensions?: Record<string, string>;
+};
+
+/**
+ * Pulls the machine-readable parts out of a Google API error's `details`: which
+ * quota was hit and how long the server wants us to wait. Google rewords the
+ * human-readable message, but these structures are stable.
+ */
+function parseQuotaDetails(details: any[] | undefined) {
+  const violations: QuotaViolation[] = [];
+  let retryDelayMs = 0;
+
+  for (const detail of details ?? []) {
+    const type = String(detail?.["@type"] ?? "");
+    if (type.endsWith("google.rpc.QuotaFailure")) {
+      violations.push(...(detail.violations ?? []));
+    } else if (type.endsWith("google.rpc.RetryInfo")) {
+      // Formatted as a protobuf Duration, e.g. "22s" or "22.393415552s".
+      const seconds = parseFloat(String(detail.retryDelay ?? ""));
+      if (Number.isFinite(seconds) && seconds > 0) {
+        retryDelayMs = Math.ceil(seconds * 1000);
+      }
+    }
+  }
+
+  return { violations, retryDelayMs };
+}
+
+/**
+ * The instant the quota day containing `at` began, in Google's billing
+ * timezone. Twice a year a DST change makes this an hour off, which only
+ * shifts a recheck by an hour and is not worth a timezone library.
+ */
+function startOfQuotaDay(at: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: QUOTA_RESET_TIMEZONE,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(at));
+  const get = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  // Some ICU builds render midnight as hour 24.
+  const secondsIntoDay = (get("hour") % 24) * 3600 + get("minute") * 60 + get("second");
+  return at - secondsIntoDay * 1000 - (at % 1000);
+}
+
+/** How long until daily quotas reset, from `now`. */
+function msUntilDailyQuotaReset(now: number): number {
+  return startOfQuotaDay(now + 24 * 60 * 60 * 1000) - now;
+}
 
 type UpdateFn = typeof GoogleAIKeyProvider.prototype.update;
 
@@ -124,12 +189,42 @@ export class GoogleAIKeyChecker extends KeyCheckerBase<GoogleAIKey> {
     });
 
     const familiesArray = Array.from(families);
+
+    // ListModels reports every model the API offers, not the ones this key can
+    // still afford, so families the proxy took away after a quota error would
+    // be handed straight back and immediately fail again.
+    const stillOverQuota = this.getActiveOverQuotaFamilies(key);
+    const availableFamilies = familiesArray.filter(
+      (f) => !stillOverQuota.includes(f)
+    );
+
     this.updateKey(key.hash, {
-      modelFamilies: familiesArray,
+      modelFamilies: availableFamilies,
       modelIds: Array.from(ids),
+      overQuotaFamilies: stillOverQuota,
     });
 
-    return familiesArray;
+    return availableFamilies;
+  }
+
+  /**
+   * The families a quota error took away that are still out, dropping any whose
+   * daily quota has rolled over since it was recorded.
+   */
+  private getActiveOverQuotaFamilies(
+    key: GoogleAIKey
+  ): GoogleAIModelFamily[] {
+    const families = key.overQuotaFamilies ?? [];
+    if (!families.length) return [];
+
+    if ((key.overQuotaFamiliesAt ?? 0) < startOfQuotaDay(Date.now())) {
+      this.log.info(
+        { key: key.hash, families },
+        "Daily quota reset since these families were marked over quota; restoring them."
+      );
+      return [];
+    }
+    return families;
   }
 
   private async testGenerateContent(key: GoogleAIKey) {
@@ -200,6 +295,11 @@ export class GoogleAIKeyChecker extends KeyCheckerBase<GoogleAIKey> {
     }
   }
 
+  /** A `lastChecked` value that makes the key due for a check in `delayMs`. */
+  private recheckIn(delayMs: number): number {
+    return Date.now() - (KEY_CHECK_PERIOD - delayMs);
+  }
+
   protected handleAxiosError(key: GoogleAIKey, error: AxiosError): void {
     if (error.response && GoogleAIKeyChecker.errorIsGoogleAIError(error)) {
       const httpStatus = error.response.status;
@@ -242,13 +342,16 @@ export class GoogleAIKeyChecker extends KeyCheckerBase<GoogleAIKey> {
           return;
         case 429: { // Resource Exhausted (Rate Limit / Quota)
           const text = JSON.stringify(error.response.data.error);
+          const { violations, retryDelayMs } = parseQuotaDetails(details);
+          // A zero-valued quota is not a rate limit at all; the key has no
+          // allowance for the model and waiting will never change that.
+          const noAllowance = violations.some((v) => v.quotaValue === "0");
           const hardQuotaMessages = [
             /GenerateContentRequestsPerMinutePerProjectPerRegion/i, // Often indicates a hard limit or misconfiguration
-            /"quota_limit_value":"0"/i, // Explicitly out of quota
             /billing account not found/i, // Billing issue presented as 429 sometimes
             /project has been suspended/i, // Project level issue
           ];
-          if (hardQuotaMessages.some((r) => r.test(text))) {
+          if (noAllowance || hardQuotaMessages.some((r) => r.test(text))) {
             this.log.warn(
               { key: key.hash, error: text, errorCode: code, httpStatus },
               "Key check returned a 429 error indicating a hard quota limit or billing issue. Disabling and marking as over quota, but not revoking."
@@ -257,13 +360,32 @@ export class GoogleAIKeyChecker extends KeyCheckerBase<GoogleAIKey> {
             return;
           }
 
-          // Transient 429 (e.g., TPM/RPM exceeded)
-          this.log.warn(
-            { key: key.hash, status, code, message, details, httpStatus },
-            "Key is temporarily rate limited (429). Rechecking key in 1 minute."
+          // A daily quota does not come back for hours, so the old fixed
+          // one-minute recheck just spent the next day's allowance on probe
+          // requests. Per-minute limits are paced by the server's own
+          // RetryInfo instead of a guess.
+          const dailyQuota = violations.some((v) =>
+            /PerDay/i.test(v.quotaId ?? "")
           );
-          const nextTransient429 = Date.now() - (KEY_CHECK_PERIOD - 60 * 1000);
-          this.updateKey(key.hash, { lastChecked: nextTransient429 });
+          const recheckDelay = dailyQuota
+            ? msUntilDailyQuotaReset(Date.now())
+            : Math.max(retryDelayMs, MIN_RECHECK_DELAY);
+
+          this.log.warn(
+            {
+              key: key.hash,
+              status,
+              code,
+              message,
+              details,
+              httpStatus,
+              dailyQuota,
+              quotaIds: violations.map((v) => v.quotaId),
+              recheckInMinutes: Math.round(recheckDelay / 60000),
+            },
+            "Key is rate limited (429). Rechecking when its quota should have recovered."
+          );
+          this.updateKey(key.hash, { lastChecked: this.recheckIn(recheckDelay) });
           return;
         }
         case 500: // Internal Server Error

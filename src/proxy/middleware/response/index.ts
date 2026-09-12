@@ -1103,13 +1103,16 @@ async function handleGoogleAIRateLimitError(
             modelFamilies: GoogleAIModelFamily[];
             isOverQuota: boolean;
             overQuotaFamilies: GoogleAIModelFamily[];
+            overQuotaFamiliesAt: number;
           }
           
           // Create a properly typed update
           const update: GoogleAIPartialUpdate = { 
             modelFamilies: updatedFamilies as GoogleAIModelFamily[],
             isOverQuota: true,
-            overQuotaFamilies
+            overQuotaFamilies,
+            // Stamped so the key checker can tell when this quota window rolls over.
+            overQuotaFamiliesAt: Date.now()
           };
           
           // Use the standard KeyPool interface
