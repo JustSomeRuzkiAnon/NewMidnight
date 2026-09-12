@@ -566,6 +566,23 @@ const handleUpstreamErrors: ProxyResHandlerWithBody = async (
         await reenqueueRequest(req);
         throw new RetryableError("OpenRouter is temporarily unavailable, retrying...");
      }
+  } else if (statusCode === 524) {
+    // Cloudflare answers 524 with an HTML page when the origin took too long to
+    // reply, so there is no JSON error to inspect. For upstream proxies this is
+    // the same transient capacity problem as a 503 and is retried the same way.
+    if (service === "atf" || service === "custom") {
+      req.log.warn(
+        { key: req.key?.hash, errorType, errorPayload },
+        "Custom provider upstream timed out (524). Re-enqueueing request."
+      );
+      keyPool.markRateLimited(req.key!);
+      applyCustomRetryDelay(req);
+      await reenqueueRequest(req);
+      throw new RetryableError(
+        "Upstream timed out (524), re-enqueued request."
+      );
+    }
+    errorPayload.proxy_note = `Upstream timed out before responding. Try again later.`;
   } else {
     errorPayload.proxy_note = `Unrecognized error from upstream service.`;
   }

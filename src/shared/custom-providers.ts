@@ -64,7 +64,7 @@ export interface CustomProvider {
    * Retry requests that the upstream rate-limited or refused for lack of
    * capacity from inside an already-started response stream, instead of passing
    * its error on to the client. A 429 or 503 that arrives as an HTTP status is
-   * always retried, regardless of this.
+   * always retried, regardless of this, as is a Cloudflare 524.
    */
   retry429: boolean;
   /**
